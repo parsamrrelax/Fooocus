@@ -208,7 +208,7 @@ onUiLoaded(async() => {
             elemId,
             deltaY,
             withoutValue = false,
-            percentage = 5
+            percentage = 2
         ) {
             const input =
                 gradioApp().querySelector(
@@ -263,12 +263,12 @@ onUiLoaded(async() => {
                 e.preventDefault();
 
                 let zoomPosX, zoomPosY;
-                let delta = 0.2;
+                let delta = 0.1;
 
                 if (elemData[elemId].zoomLevel > 7) {
-                    delta = 0.9;
+                    delta = 0.4;
                 } else if (elemData[elemId].zoomLevel > 2) {
-                    delta = 0.6;
+                    delta = 0.3;
                 }
 
                 zoomPosX = e.clientX;
