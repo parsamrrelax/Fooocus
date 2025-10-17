@@ -38,6 +38,8 @@ onUiLoaded(async() => {
         canvas_hotkey_reset: "KeyR",
         canvas_hotkey_fullscreen: "KeyS",
         canvas_hotkey_move: "KeyF",
+        canvas_hotkey_zoom_in: "KeyK",
+        canvas_hotkey_zoom_out: "KeyL",
         canvas_show_tooltip: true,
         canvas_auto_expand: true,
         canvas_blur_prompt: true,
@@ -105,7 +107,9 @@ onUiLoaded(async() => {
                     configKey: "canvas_hotkey_fullscreen",
                     action: "Fullscreen mode"
                 },
-                {configKey: "canvas_hotkey_move", action: "Move canvas"}
+                {configKey: "canvas_hotkey_move", action: "Move canvas"},
+                {configKey: "canvas_hotkey_zoom_in", action: "Zoom in"},
+                {configKey: "canvas_hotkey_zoom_out", action: "Zoom out"}
             ];
 
             // Create hotkeys array based on the config values
@@ -286,6 +290,31 @@ onUiLoaded(async() => {
             }
         }
 
+        // Handle keyboard zoom (K for zoom in, L for zoom out)
+        function handleKeyboardZoom(operation) {
+            let delta = 0.1;
+
+            if (elemData[elemId].zoomLevel > 7) {
+                delta = 0.4;
+            } else if (elemData[elemId].zoomLevel > 2) {
+                delta = 0.3;
+            }
+
+            // Get the center of the visible area
+            const rect = targetElement.getBoundingClientRect();
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+
+            fullScreenMode = false;
+            elemData[elemId].zoomLevel = updateZoom(
+                elemData[elemId].zoomLevel + (operation === "+" ? delta : -delta),
+                centerX,
+                centerY
+            );
+
+            targetElement.isZoomed = true;
+        }
+
         /**
          * This function fits the target element to the screen by calculating
          * the required scale and offsets. It also updates the global variables
@@ -447,6 +476,18 @@ onUiLoaded(async() => {
             if (action) {
                 event.preventDefault();
                 action(event);
+            }
+
+            // Handle keyboard zoom in (K key)
+            if (event.code === hotkeysConfig.canvas_hotkey_zoom_in) {
+                event.preventDefault();
+                handleKeyboardZoom("+");
+            }
+
+            // Handle keyboard zoom out (L key)
+            if (event.code === hotkeysConfig.canvas_hotkey_zoom_out) {
+                event.preventDefault();
+                handleKeyboardZoom("-");
             }
 
             if (
