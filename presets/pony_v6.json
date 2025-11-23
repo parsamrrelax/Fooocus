@@ -44,11 +44,11 @@
     "default_overwrite_step": -1,
     "default_inpaint_engine_version": "None",
     "checkpoint_downloads": {
-        "ponyDiffusionV6XL.safetensors": "https://huggingface.co/mashb1t/fav_models/resolve/main/fav/ponyDiffusionV6XL.safetensors"
+        "ponyDiffusionV6XL.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/fav_models/ponyDiffusionV6XL.safetensors"
     },
     "embeddings_downloads": {},
     "lora_downloads": {},
     "vae_downloads": {
-        "ponyDiffusionV6XL_vae.safetensors": "https://huggingface.co/mashb1t/fav_models/resolve/main/fav/ponyDiffusionV6XL_vae.safetensors"
+        "ponyDiffusionV6XL_vae.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/fav_models/ponyDiffusionV6XL_vae.safetensors"
     }
 }

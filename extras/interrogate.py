@@ -26,7 +26,7 @@ class Interrogator:
     def interrogate(self, img_rgb):
         if self.blip_model is None:
             filename = load_file_from_url(
-                url='https://huggingface.co/lllyasviel/misc/resolve/main/model_base_caption_capfilt_large.pth',
+                url='https://huggingface.co/Mrrelax/pp/resolve/main/misc/model_base_caption_capfilt_large.pth',
                 model_dir=path_clip_vision,
                 file_name='model_base_caption_capfilt_large.pth',
             )
