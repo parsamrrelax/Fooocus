@@ -133,9 +133,15 @@ def download_models(default_model, previous_default_models, checkpoint_downloads
         load_file_from_url(url=url, model_dir=model_dir, file_name=file_name)
     for file_name, url in embeddings_downloads.items():
         load_file_from_url(url=url, model_dir=config.path_embeddings, file_name=file_name)
-    for file_name, url in lora_downloads.items():
+    import concurrent.futures
+
+    def download_lora(item):
+        file_name, url = item
         model_dir = os.path.dirname(get_file_from_folder_list(file_name, config.paths_loras))
         load_file_from_url(url=url, model_dir=model_dir, file_name=file_name)
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        executor.map(download_lora, lora_downloads.items())
     for file_name, url in vae_downloads.items():
         load_file_from_url(url=url, model_dir=config.path_vae, file_name=file_name)
 
