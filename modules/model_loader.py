@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 from urllib.parse import urlparse
 from typing import Optional
 
@@ -23,6 +25,17 @@ def load_file_from_url(
     cached_file = os.path.abspath(os.path.join(model_dir, file_name))
     if not os.path.exists(cached_file):
         print(f'Downloading: "{url}" to {cached_file}\n')
+        
+        if shutil.which('aria2c'):
+            try:
+                subprocess.run(
+                    ['aria2c', '-x', '16', '-s', '16', '-k', '1M', '-c', '-d', model_dir, '-o', file_name, url],
+                    check=True
+                )
+                return cached_file
+            except subprocess.CalledProcessError:
+                print("aria2c failed, falling back to default downloader.")
+
         from torch.hub import download_url_to_file
         download_url_to_file(url, cached_file, progress=progress)
     return cached_file
