@@ -105,7 +105,8 @@
         "squeezedstanding.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/squeezedstanding.safetensors",
         "briefsexposed.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/briefsexposed.safetensors",
         "microbikini.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/microbikini.safetensors",
-        "sportleggings.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/sportleggings.safetensors"
+        "sportleggings.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/sportleggings.safetensors",
+        "paleskin.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/paleskin.safetensors"
     },
     "previous_default_models": [
         "juggernautXL_version8Rundiffusion.safetensors",
