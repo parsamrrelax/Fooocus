@@ -304,6 +304,7 @@ with shared.gradio_root:
 
                                     extras = {}
                                     sam_options = None
+                                    source_image = image['image'] if isinstance(image, dict) else image
                                     if mask_model == 'u2net_cloth_seg':
                                         extras['cloth_category'] = cloth_category
                                     elif mask_model == 'sam':
@@ -319,7 +320,7 @@ with shared.gradio_root:
 
                                     mask, _, _, _ = generate_mask_from_image(image, mask_model, extras, sam_options)
 
-                                    return mask
+                                    return {'image': source_image, 'mask': mask}
 
 
                                 inpaint_mask_model.change(lambda x: [gr.update(visible=x == 'u2net_cloth_seg')] +

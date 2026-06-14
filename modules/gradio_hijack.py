@@ -315,8 +315,8 @@ class Image(
         return self._format_image(im)
 
     def postprocess(
-        self, y: np.ndarray | _Image.Image | str | Path | None
-    ) -> str | None:
+        self, y: np.ndarray | _Image.Image | str | Path | dict | None
+    ) -> str | dict | None:
         """
         Parameters:
             y: image as a numpy array, PIL Image, string/Path filepath, or string URL
@@ -325,6 +325,11 @@ class Image(
         """
         if y is None:
             return None
+        if isinstance(y, dict):
+            return {
+                "image": self.postprocess(y.get("image")),
+                "mask": self.postprocess(y.get("mask")),
+            }
         if isinstance(y, np.ndarray):
             return processing_utils.encode_array_to_base64(y)
         elif isinstance(y, _Image.Image):
