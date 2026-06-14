@@ -895,8 +895,9 @@ with shared.gradio_root:
                                                                  queue=False, show_progress=False)
 
                         def update_inpaint_brush(brush_color, use_eraser):
-                            color = '#000000' if use_eraser else brush_color
-                            return [gr.update(brush_color=color)] * 2
+                            inpaint_color = '#000000' if use_eraser else brush_color
+                            advanced_mask_color = '#FFFFFF' if use_eraser else brush_color
+                            return gr.update(brush_color=inpaint_color), gr.update(brush_color=advanced_mask_color)
 
                         inpaint_mask_color.change(update_inpaint_brush, inputs=[inpaint_mask_color, inpaint_mask_eraser],
                                                   outputs=[inpaint_input_image, inpaint_mask_image],
