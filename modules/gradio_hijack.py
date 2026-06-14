@@ -296,9 +296,12 @@ class Image(
         if self.tool == "sketch" and self.source in ["upload", "webcam"]:
             if mask is not None:
                 mask_im = processing_utils.decode_base64_to_image(mask)
-                if mask_im.mode == "RGBA":  # whiten any opaque pixels in the mask
-                    alpha_data = mask_im.getchannel("A").convert("L")
-                    mask_im = _Image.merge("RGB", [alpha_data, alpha_data, alpha_data])
+                if mask_im.mode == "RGBA":  # whiten opaque pixels, but keep black eraser strokes transparent
+                    alpha_data = np.array(mask_im.getchannel("A").convert("L"))
+                    rgb_data = np.array(mask_im.convert("RGB"))
+                    eraser_pixels = (alpha_data > 0) & np.all(rgb_data < 16, axis=2)
+                    mask_data = np.where((alpha_data > 0) & ~eraser_pixels, 255, 0).astype(np.uint8)
+                    mask_im = _Image.fromarray(mask_data, mode="L").convert("RGB")
                 return {
                     "image": self._format_image(im),
                     "mask": self._format_image(mask_im),

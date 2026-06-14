@@ -259,6 +259,7 @@ with shared.gradio_root:
                         with gr.Row():
                             with gr.Column():
                                 inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
+                                inpaint_mask_eraser = gr.Checkbox(label='Use mask eraser', value=False)
                                 inpaint_advanced_masking_checkbox = gr.Checkbox(label='Enable Advanced Masking Features', value=modules.config.default_inpaint_advanced_masking_checkbox)
                                 inpaint_mode = gr.Dropdown(choices=modules.flags.inpaint_options, value=modules.config.default_inpaint_method, label='Method')
                                 inpaint_additional_prompt = gr.Textbox(placeholder="Describe what you want to inpaint.", elem_id='inpaint_additional_prompt', label='Inpaint Additional Prompt', visible=False)
@@ -855,9 +856,16 @@ with shared.gradio_root:
                                                                  outputs=[inpaint_mask_image, inpaint_mask_generation_col],
                                                                  queue=False, show_progress=False)
 
-                        inpaint_mask_color.change(lambda x: gr.update(brush_color=x), inputs=inpaint_mask_color,
-                                                  outputs=inpaint_input_image,
+                        def update_inpaint_brush(brush_color, use_eraser):
+                            color = '#000000' if use_eraser else brush_color
+                            return [gr.update(brush_color=color)] * 2
+
+                        inpaint_mask_color.change(update_inpaint_brush, inputs=[inpaint_mask_color, inpaint_mask_eraser],
+                                                  outputs=[inpaint_input_image, inpaint_mask_image],
                                                   queue=False, show_progress=False)
+                        inpaint_mask_eraser.change(update_inpaint_brush, inputs=[inpaint_mask_color, inpaint_mask_eraser],
+                                                   outputs=[inpaint_input_image, inpaint_mask_image],
+                                                   queue=False, show_progress=False)
 
                     with gr.Tab(label='FreeU'):
                         freeu_enabled = gr.Checkbox(label='Enabled', value=False)
