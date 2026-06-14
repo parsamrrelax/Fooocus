@@ -56,6 +56,7 @@ class AsyncTask:
         self.inpaint_input_image = args.pop()
         self.inpaint_additional_prompt = args.pop()
         self.inpaint_mask_image_upload = args.pop()
+        self.inpaint_generated_mask = args.pop()
 
         self.disable_preview = args.pop()
         self.disable_intermediate_results = args.pop()
@@ -867,38 +868,27 @@ def worker():
             inpaint_mask = async_task.inpaint_input_image['mask'][:, :, 0]
 
             if async_task.inpaint_advanced_masking_checkbox:
+                advanced_masks = []
+                if isinstance(async_task.inpaint_generated_mask, np.ndarray):
+                    advanced_masks.append(async_task.inpaint_generated_mask)
+
                 if isinstance(async_task.inpaint_mask_image_upload, dict):
                     uploaded_image = async_task.inpaint_mask_image_upload.get('image')
                     uploaded_mask = async_task.inpaint_mask_image_upload.get('mask')
-                    if isinstance(uploaded_image, np.ndarray) and isinstance(uploaded_mask, np.ndarray):
-                        mask_gray = uploaded_mask[:, :, 0] if uploaded_mask.ndim == 3 else uploaded_mask
-                        is_source_image = uploaded_image.shape == inpaint_image.shape and np.mean(
-                            np.abs(uploaded_image.astype(np.float32) - inpaint_image.astype(np.float32))) < 1.0
-                        is_generated_preview = False
-                        if uploaded_image.shape == inpaint_image.shape and mask_gray.shape == inpaint_image.shape[:2]:
-                            expected_preview = inpaint_image.copy()
-                            expected_preview[mask_gray > 127] = (
-                                expected_preview[mask_gray > 127] * 0.35 + np.array([255, 255, 255]) * 0.65
-                            ).astype(np.uint8)
-                            is_generated_preview = np.mean(
-                                np.abs(uploaded_image.astype(np.float32) - expected_preview.astype(np.float32))) < 1.0
-                        if is_source_image or is_generated_preview:
-                            async_task.inpaint_mask_image_upload = uploaded_mask
-                        elif uploaded_image.ndim == 3:
-                            async_task.inpaint_mask_image_upload = np.maximum(uploaded_image, uploaded_mask)
-                    elif isinstance(uploaded_mask, np.ndarray):
-                        async_task.inpaint_mask_image_upload = uploaded_mask
-                    elif isinstance(uploaded_image, np.ndarray):
-                        async_task.inpaint_mask_image_upload = uploaded_image
-                if isinstance(async_task.inpaint_mask_image_upload, np.ndarray):
+                    if isinstance(uploaded_mask, np.ndarray) and np.any(uploaded_mask > 0):
+                        advanced_masks.append(uploaded_mask)
+                    elif not isinstance(async_task.inpaint_generated_mask, np.ndarray) and isinstance(uploaded_image, np.ndarray):
+                        advanced_masks.append(uploaded_image)
+                elif isinstance(async_task.inpaint_mask_image_upload, np.ndarray):
+                    advanced_masks.append(async_task.inpaint_mask_image_upload)
+
+                for advanced_mask in advanced_masks:
                     H, W, C = inpaint_image.shape
-                    async_task.inpaint_mask_image_upload = resample_image(async_task.inpaint_mask_image_upload,
-                                                                          width=W, height=H)
-                    if async_task.inpaint_mask_image_upload.ndim == 3:
-                        async_task.inpaint_mask_image_upload = np.mean(async_task.inpaint_mask_image_upload, axis=2)
-                    async_task.inpaint_mask_image_upload = (async_task.inpaint_mask_image_upload > 127).astype(
-                        np.uint8) * 255
-                    inpaint_mask = np.maximum(inpaint_mask, async_task.inpaint_mask_image_upload)
+                    advanced_mask = resample_image(advanced_mask, width=W, height=H)
+                    if advanced_mask.ndim == 3:
+                        advanced_mask = np.mean(advanced_mask, axis=2)
+                    advanced_mask = (advanced_mask > 127).astype(np.uint8) * 255
+                    inpaint_mask = np.maximum(inpaint_mask, advanced_mask)
 
             if int(async_task.inpaint_erode_or_dilate) != 0:
                 inpaint_mask = erode_or_dilate(inpaint_mask, async_task.inpaint_erode_or_dilate)

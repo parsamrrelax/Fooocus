@@ -273,6 +273,7 @@ with shared.gradio_root:
 
                             with gr.Column(visible=modules.config.default_inpaint_advanced_masking_checkbox) as inpaint_mask_generation_col:
                                 inpaint_mask_image = grh.Image(label='Mask Upload', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", mask_opacity=1, elem_id='inpaint_mask_canvas')
+                                inpaint_generated_mask = gr.State(None)
                                 invert_mask_checkbox = gr.Checkbox(label='Invert Mask When Generating', value=modules.config.default_invert_mask_checkbox)
                                 inpaint_mask_model = gr.Dropdown(label='Mask generation model',
                                                                  choices=flags.inpaint_mask_models,
@@ -322,14 +323,14 @@ with shared.gradio_root:
                                     mask, _, _, _ = generate_mask_from_image(image, mask_model, extras, sam_options)
 
                                     if source_image is None or mask is None:
-                                        return {'image': source_image, 'mask': mask}
+                                        return source_image, mask
 
                                     mask_preview = source_image.copy()
                                     mask_gray = mask[:, :, 0] if mask.ndim == 3 else mask
                                     masked = mask_gray > 127
-                                    mask_preview[masked] = (mask_preview[masked] * 0.35 + np.array([255, 255, 255]) * 0.65).astype(np.uint8)
+                                    mask_preview[masked] = (mask_preview[masked] * 0.35 + np.array([255, 64, 64]) * 0.65).astype(np.uint8)
 
-                                    return {'image': mask_preview, 'mask': mask}
+                                    return mask_preview, mask
 
 
                                 inpaint_mask_model.change(lambda x: [gr.update(visible=x == 'u2net_cloth_seg')] +
@@ -1013,7 +1014,9 @@ with shared.gradio_root:
                                            inpaint_mask_dino_prompt_text, inpaint_mask_sam_model,
                                            inpaint_mask_box_threshold, inpaint_mask_text_threshold,
                                            inpaint_mask_sam_max_detections, dino_erode_or_dilate, debugging_dino],
-                                   outputs=inpaint_mask_image, show_progress=True, queue=True)
+                                   outputs=[inpaint_mask_image, inpaint_generated_mask], show_progress=True, queue=True)
+        inpaint_input_image.upload(lambda: None, outputs=inpaint_generated_mask, queue=False, show_progress=False)
+        inpaint_mask_image.clear(lambda: None, outputs=inpaint_generated_mask, queue=False, show_progress=False)
 
         ctrls = [currentTask, generate_image_grid]
         ctrls += [
@@ -1025,7 +1028,7 @@ with shared.gradio_root:
         ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls
         ctrls += [input_image_checkbox, current_tab]
         ctrls += [uov_method, uov_input_image]
-        ctrls += [outpaint_selections, inpaint_input_image, inpaint_additional_prompt, inpaint_mask_image]
+        ctrls += [outpaint_selections, inpaint_input_image, inpaint_additional_prompt, inpaint_mask_image, inpaint_generated_mask]
         ctrls += [disable_preview, disable_intermediate_results, disable_seed_increment, black_out_nsfw]
         ctrls += [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg, clip_skip]
         ctrls += [sampler_name, scheduler_name, vae_name]
