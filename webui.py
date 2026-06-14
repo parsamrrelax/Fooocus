@@ -299,6 +299,7 @@ with shared.gradio_root:
                                     inpaint_mask_text_threshold = gr.Slider(label="Text Threshold", minimum=0.0, maximum=1.0, value=0.25, step=0.05)
                                     inpaint_mask_sam_max_detections = gr.Slider(label="Maximum number of detections", info="Set to 0 to detect all", minimum=0, maximum=10, value=modules.config.default_sam_max_detections, step=1, interactive=True)
                                 generate_mask_button = gr.Button(value='Generate mask from image')
+                                apply_mask_edit_button = gr.Button(value='Apply mask edits to preview')
 
                                 def make_mask_preview(source_image, mask):
                                     import numpy as np
@@ -1043,10 +1044,10 @@ with shared.gradio_root:
                                            inpaint_mask_box_threshold, inpaint_mask_text_threshold,
                                            inpaint_mask_sam_max_detections, dino_erode_or_dilate, debugging_dino],
                                    outputs=[inpaint_mask_image, inpaint_generated_mask], show_progress=True, queue=True)
-        inpaint_mask_image.edit(fn=apply_mask_edit,
-                                inputs=[inpaint_mask_image, inpaint_generated_mask, inpaint_input_image, inpaint_mask_eraser],
-                                outputs=[inpaint_mask_image, inpaint_generated_mask],
-                                queue=False, show_progress=False)
+        apply_mask_edit_button.click(fn=apply_mask_edit,
+                                     inputs=[inpaint_mask_image, inpaint_generated_mask, inpaint_input_image, inpaint_mask_eraser],
+                                     outputs=[inpaint_mask_image, inpaint_generated_mask],
+                                     queue=False, show_progress=False)
         inpaint_input_image.upload(lambda: None, outputs=inpaint_generated_mask, queue=False, show_progress=False)
         inpaint_mask_image.upload(lambda: None, outputs=inpaint_generated_mask, queue=False, show_progress=False)
         inpaint_mask_image.clear(lambda: None, outputs=inpaint_generated_mask, queue=False, show_progress=False)
