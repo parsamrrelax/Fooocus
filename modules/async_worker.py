@@ -871,7 +871,18 @@ def worker():
                     uploaded_image = async_task.inpaint_mask_image_upload.get('image')
                     uploaded_mask = async_task.inpaint_mask_image_upload.get('mask')
                     if isinstance(uploaded_image, np.ndarray) and isinstance(uploaded_mask, np.ndarray):
-                        if uploaded_image.shape == inpaint_image.shape and np.mean(np.abs(uploaded_image.astype(np.float32) - inpaint_image.astype(np.float32))) < 1.0:
+                        mask_gray = uploaded_mask[:, :, 0] if uploaded_mask.ndim == 3 else uploaded_mask
+                        is_source_image = uploaded_image.shape == inpaint_image.shape and np.mean(
+                            np.abs(uploaded_image.astype(np.float32) - inpaint_image.astype(np.float32))) < 1.0
+                        is_generated_preview = False
+                        if uploaded_image.shape == inpaint_image.shape and mask_gray.shape == inpaint_image.shape[:2]:
+                            expected_preview = inpaint_image.copy()
+                            expected_preview[mask_gray > 127] = (
+                                expected_preview[mask_gray > 127] * 0.35 + np.array([255, 255, 255]) * 0.65
+                            ).astype(np.uint8)
+                            is_generated_preview = np.mean(
+                                np.abs(uploaded_image.astype(np.float32) - expected_preview.astype(np.float32))) < 1.0
+                        if is_source_image or is_generated_preview:
                             async_task.inpaint_mask_image_upload = uploaded_mask
                         elif uploaded_image.ndim == 3:
                             async_task.inpaint_mask_image_upload = np.maximum(uploaded_image, uploaded_mask)

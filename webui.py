@@ -300,6 +300,7 @@ with shared.gradio_root:
                                 generate_mask_button = gr.Button(value='Generate mask from image')
 
                                 def generate_mask(image, mask_model, cloth_category, dino_prompt_text, sam_model, box_threshold, text_threshold, sam_max_detections, dino_erode_or_dilate, dino_debug):
+                                    import numpy as np
                                     from extras.inpaint_mask import generate_mask_from_image
 
                                     extras = {}
@@ -320,7 +321,15 @@ with shared.gradio_root:
 
                                     mask, _, _, _ = generate_mask_from_image(image, mask_model, extras, sam_options)
 
-                                    return {'image': source_image, 'mask': mask}
+                                    if source_image is None or mask is None:
+                                        return {'image': source_image, 'mask': mask}
+
+                                    mask_preview = source_image.copy()
+                                    mask_gray = mask[:, :, 0] if mask.ndim == 3 else mask
+                                    masked = mask_gray > 127
+                                    mask_preview[masked] = (mask_preview[masked] * 0.35 + np.array([255, 255, 255]) * 0.65).astype(np.uint8)
+
+                                    return {'image': mask_preview, 'mask': mask}
 
 
                                 inpaint_mask_model.change(lambda x: [gr.update(visible=x == 'u2net_cloth_seg')] +
