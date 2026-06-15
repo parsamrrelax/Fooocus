@@ -21,7 +21,7 @@ class SAMOptions:
 
                  # SAM
                  max_detections=2,
-                 model_type='vit_b'
+                 model_type='vit_h'
                  ):
         self.dino_prompt = dino_prompt
         self.dino_box_threshold = dino_box_threshold
