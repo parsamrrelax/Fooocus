@@ -44,7 +44,8 @@
     "default_aspect_ratio": "1152*896",
     "default_overwrite_step": -1,
     "checkpoint_downloads": {
-        "juggernautXL_v8Rundiffusion.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/pp.safetensors"
+        "juggernautXL_v8Rundiffusion.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/pp.safetensors",
+        "realvision.safetensors": "https://huggingface.co/Mrrelax/pp/resolve/main/realvisxlV50_v50Bakedvae.safetensors" 
     },
     "embeddings_downloads": {},
     "lora_downloads": {
