@@ -29,8 +29,10 @@ def load_file_from_url(
         if shutil.which('aria2c'):
             try:
                 subprocess.run(
-                    ['aria2c', '--console-log-level=error', '-c', '-x', '16', '-s', '16', '-k', '1M', '-d', model_dir, '-o', file_name, url],
-                    check=True
+                    ['aria2c', '--quiet=true', '-c', '-x', '4', '-s', '4', '-k', '8M',
+                     '--retry-wait=5', '--max-tries=0', '-d', model_dir, '-o', file_name, url],
+                    check=True,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
                 return cached_file
             except subprocess.CalledProcessError:
