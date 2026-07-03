@@ -6,6 +6,9 @@ root = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(root)
 os.chdir(root)
 
+from modules.colab_prepare import prepare_colab_environment
+
+prepare_colab_environment()
 
 try:
     import pygit2

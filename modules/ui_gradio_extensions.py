@@ -9,6 +9,37 @@ from modules.localization import localization_js
 
 GradioTemplateResponseOriginal = gr.routes.templates.TemplateResponse
 
+
+def _normalize_template_response_args(args, kwargs):
+    # Gradio 3.x calls TemplateResponse(name, context). Starlette 1.0+ requires
+    # TemplateResponse(request, name, context) and treats the first arg as request.
+    if not args or not isinstance(args[0], str):
+        return args, kwargs
+
+    name = args[0]
+    context = args[1] if len(args) > 1 else kwargs.get('context')
+    if not isinstance(context, dict):
+        return args, kwargs
+
+    request = context.get('request')
+    if request is None:
+        return args, kwargs
+
+    try:
+        import starlette
+        major = int(starlette.__version__.split('.')[0])
+    except (ImportError, ValueError, AttributeError):
+        return args, kwargs
+
+    if major < 1:
+        return args, kwargs
+
+    remaining_args = args[2:]
+    new_kwargs = dict(kwargs)
+    new_kwargs.pop('context', None)
+    return (request, name, context) + remaining_args, new_kwargs
+
+
 modules_path = os.path.dirname(os.path.realpath(__file__))
 script_path = os.path.dirname(modules_path)
 
@@ -58,6 +89,7 @@ def reload_javascript():
     css = css_html()
 
     def template_response(*args, **kwargs):
+        args, kwargs = _normalize_template_response_args(args, kwargs)
         res = GradioTemplateResponseOriginal(*args, **kwargs)
         res.body = res.body.replace(b'</head>', f'{js}</head>'.encode("utf8"))
         res.body = res.body.replace(b'</body>', f'{css}</body>'.encode("utf8"))

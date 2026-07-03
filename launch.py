@@ -27,6 +27,10 @@ TRY_INSTALL_XFORMERS = False
 
 
 def prepare_environment():
+    from modules.colab_prepare import prepare_colab_environment
+
+    prepare_colab_environment()
+
     torch_index_url = os.environ.get('TORCH_INDEX_URL', "https://download.pytorch.org/whl/cu121")
     torch_command = os.environ.get('TORCH_COMMAND',
                                    f"pip install torch==2.1.0 torchvision==0.16.0 --extra-index-url {torch_index_url}")
