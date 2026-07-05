@@ -88,6 +88,12 @@ if args.hf_mirror is not None:
     os.environ['HF_MIRROR'] = str(args.hf_mirror)
     print("Set hf_mirror to:", args.hf_mirror)
 
+if args.hf_token is not None:
+    os.environ['HF_TOKEN'] = str(args.hf_token)
+    print("Hugging Face token provided, will use it to speed up downloads and avoid rate limits.")
+elif 'HF_TOKEN' in os.environ and os.environ['HF_TOKEN'].strip():
+    print("Hugging Face token found in environment, will use it to speed up downloads and avoid rate limits.")
+
 from modules import config
 from modules.hash_cache import init_cache
 
