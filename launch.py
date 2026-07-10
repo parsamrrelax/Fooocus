@@ -77,6 +77,12 @@ def ini_args():
 
 
 prepare_environment()
+
+from modules.colab_prepare import patch_gradio_websocket_limits
+
+# After Gradio is installed: raise WebSocket limits for large image edits on Colab (error 1006).
+patch_gradio_websocket_limits()
+
 build_launcher()
 args = ini_args()
 
