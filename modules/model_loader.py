@@ -5,6 +5,17 @@ from urllib.parse import urlparse
 from typing import Optional
 
 
+def _is_huggingface_host(url: str) -> bool:
+    host = (urlparse(url).hostname or '').lower()
+    return host == 'huggingface.co' or host.endswith('.huggingface.co')
+
+
+def _headers_for_url(url: str, hf_token: str) -> dict:
+    if hf_token and _is_huggingface_host(url):
+        return {'Authorization': f'Bearer {hf_token}'}
+    return {}
+
+
 def load_file_from_url(
         url: str,
         *,
@@ -30,46 +41,70 @@ def load_file_from_url(
         file_name = os.path.basename(parts.path)
     cached_file = os.path.abspath(os.path.join(model_dir, file_name))
 
-    hf_token = os.environ.get("HF_TOKEN", "").strip()
-    auth_header = None
-    if is_hf_url and hf_token:
-        auth_header = f'Authorization: Bearer {hf_token}'
+    hf_token = os.environ.get("HF_TOKEN", "").strip() if is_hf_url else ""
 
     if not os.path.exists(cached_file):
         print(f'Downloading: "{url}" to {cached_file}\n')
 
+        # Resolve redirects with auth only on huggingface.co. Signed CDN URLs
+        # (cdn.hf.co / xet-bridge) return 403 if Authorization is forwarded.
+        download_url = _resolve_download_url(url, hf_token=hf_token)
+
         if shutil.which('aria2c'):
             try:
-                # A token grants a much higher Hugging Face rate limit, so we can
-                # also afford to open more parallel connections to speed things up.
-                connections = '16' if auth_header else '4'
-                cmd = ['aria2c', '--quiet=true', '-c', '-x', connections, '-s', connections, '-k', '8M',
-                       '--retry-wait=5', '--max-tries=0']
-                if auth_header:
-                    cmd += ['--header', auth_header]
-                cmd += ['-d', model_dir, '-o', file_name, url]
+                connections = '16' if hf_token else '4'
+                cmd = [
+                    'aria2c', '--quiet=true', '-c',
+                    '-x', connections, '-s', connections, '-k', '8M',
+                    '--retry-wait=5', '--max-tries=10',
+                    '-d', model_dir, '-o', file_name, download_url,
+                ]
+                # Never attach HF auth to aria2: it would be sent to the CDN too.
                 subprocess.run(
                     cmd,
                     check=True,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
                 )
                 return cached_file
-            except subprocess.CalledProcessError:
-                print("aria2c failed, falling back to default downloader.")
+            except subprocess.CalledProcessError as e:
+                detail = (e.stderr or '').strip()
+                if detail:
+                    print(f"aria2c failed ({detail[:300]}), falling back to default downloader.")
+                else:
+                    print("aria2c failed, falling back to default downloader.")
 
-        if auth_header:
-            _download_url_to_file_with_headers(url, cached_file, headers={'Authorization': f'Bearer {hf_token}'}, progress=progress)
-        else:
-            from torch.hub import download_url_to_file
-            download_url_to_file(url, cached_file, progress=progress)
+        _download_url_to_file(download_url, cached_file, hf_token=hf_token, progress=progress)
     return cached_file
 
 
-def _download_url_to_file_with_headers(url: str, dst: str, *, headers: dict, progress: bool = True) -> None:
-    """Same behaviour as `torch.hub.download_url_to_file`, but supports custom
-    request headers (needed to send the Hugging Face token when aria2c isn't
-    available).
-    """
+def _resolve_download_url(url: str, *, hf_token: str, max_redirects: int = 10) -> str:
+    """Follow redirects; send Authorization only to huggingface.co hosts."""
+    import requests
+
+    current = url
+    for _ in range(max_redirects):
+        response = requests.get(
+            current,
+            headers=_headers_for_url(current, hf_token),
+            stream=True,
+            timeout=60,
+            allow_redirects=False,
+        )
+        if response.is_redirect or response.status_code in (301, 302, 303, 307, 308):
+            location = response.headers.get('Location')
+            response.close()
+            if not location:
+                response.raise_for_status()
+            current = requests.compat.urljoin(current, location)
+            continue
+        response.raise_for_status()
+        response.close()
+        return current
+    raise RuntimeError(f'Too many redirects while resolving download URL: {url}')
+
+
+def _download_url_to_file(url: str, dst: str, *, hf_token: str = '', progress: bool = True) -> None:
+    """Download `url` to `dst`. Auth is only sent to huggingface.co hosts."""
     import uuid
     import requests
     from tqdm import tqdm
@@ -79,7 +114,16 @@ def _download_url_to_file_with_headers(url: str, dst: str, *, headers: dict, pro
     tmp_dst = os.path.join(dst_dir, f'{os.path.basename(dst)}.{uuid.uuid4().hex}.partial')
 
     try:
-        with requests.get(url, headers=headers, stream=True, timeout=30) as response:
+        with requests.get(
+                url,
+                headers=_headers_for_url(url, hf_token),
+                stream=True,
+                timeout=60,
+                allow_redirects=False,
+        ) as response:
+            # Final hop should already be resolved; still reject surprise redirects.
+            if response.is_redirect or response.status_code in (301, 302, 303, 307, 308):
+                raise RuntimeError(f'Unexpected redirect while downloading: {url} -> {response.headers.get("Location")}')
             response.raise_for_status()
             total_size = int(response.headers.get('Content-Length', 0))
             with open(tmp_dst, 'wb') as f, tqdm(
@@ -87,7 +131,7 @@ def _download_url_to_file_with_headers(url: str, dst: str, *, headers: dict, pro
                     disable=not progress,
                     unit='B', unit_scale=True, unit_divisor=1024,
             ) as pbar:
-                for chunk in response.iter_content(chunk_size=8192):
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
                     if chunk:
                         f.write(chunk)
                         pbar.update(len(chunk))
