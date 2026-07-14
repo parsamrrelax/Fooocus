@@ -16,6 +16,7 @@ COLAB_REQUIREMENTS = [
     'cupy-cuda12x<14.0',
     'pygit2==1.15.1',
     'starlette>=0.27.0,<1.0.0',
+    'huggingface_hub',
 ]
 
 # Gradio default WebSocket limits drop large image edits on Colab (browser error 1006).
@@ -62,6 +63,10 @@ def colab_requirements_met():
 def prepare_colab_environment():
     if not is_colab():
         return
+
+    # Colab runs on GCP; Hugging Face Xet CDN (us.gcp.cdn.hf.co) often returns 403.
+    # Disable Xet so downloads use the regular Hub/LFS path instead.
+    os.environ['HF_HUB_DISABLE_XET'] = '1'
 
     if colab_requirements_met():
         print('[Colab] Dependency versions OK.')
