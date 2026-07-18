@@ -75,16 +75,6 @@ def _candidate_urls(url: str) -> List[str]:
     return urls
 
 
-def _download_token_for_environment(hf_token: str) -> str:
-    """Colab/GCP authenticated Xet URLs often 403 with 'invalid key pair id'.
-
-    Prefer anonymous Hub/CDN URLs there; the token still helps elsewhere.
-    """
-    if is_colab():
-        return ''
-    return hf_token
-
-
 def load_file_from_url(
         url: str,
         *,
@@ -99,6 +89,9 @@ def load_file_from_url(
     token is sent with the request. This lets Hugging Face grant a higher rate
     limit / faster download quota instead of the default anonymous one.
 
+    On Colab, token+aria2 is tried first; if that fails (common GCP Xet CDN 403),
+    falls back to anonymous Hub/mirror downloads.
+
     Returns the path to the downloaded file.
     """
     is_hf_url = 'huggingface.co/' in url or 'hf.co/' in url or 'hf-mirror.com/' in url
@@ -111,13 +104,27 @@ def load_file_from_url(
         file_name = os.path.basename(parts.path)
     cached_file = os.path.abspath(os.path.join(model_dir, file_name))
 
-    env_token = os.environ.get('HF_TOKEN', '').strip() if is_hf_url else ''
-    hf_token = _download_token_for_environment(env_token)
-    if is_colab() and env_token and not hf_token:
-        print('[Colab] Downloading without HF token to avoid broken GCP Xet CDN auth URLs.')
-
     if os.path.exists(cached_file):
         return cached_file
+
+    env_token = os.environ.get('HF_TOKEN', '').strip() if is_hf_url else ''
+
+    # Colab: try authenticated aria2 first (faster / higher quota when GCP CDN works).
+    if is_colab() and env_token and shutil.which('aria2c'):
+        print(f'[Colab] Trying HF token + aria2 for "{url}"')
+        try:
+            _download_with_aria2(
+                url, cached_file, model_dir, file_name, hf_token=env_token,
+            )
+            return cached_file
+        except Exception as e:
+            _remove_partial(cached_file)
+            print(f'[Colab] Token + aria2 failed ({e}); falling back to anonymous download.')
+
+    # Outside Colab use the token; on Colab after aria2 failure (or no aria2), go anonymous.
+    hf_token = '' if is_colab() else env_token
+    if is_colab() and env_token and not hf_token:
+        print('[Colab] Downloading without HF token (anonymous Hub / mirrors).')
 
     errors = []
     for candidate in _candidate_urls(url):
@@ -126,20 +133,61 @@ def load_file_from_url(
             _download_one(candidate, cached_file, model_dir, file_name, hf_token=hf_token, progress=progress)
             return cached_file
         except Exception as e:
+            _remove_partial(cached_file)
             errors.append(f'{candidate}: {e}')
             print(f'Download failed ({e}); trying next source...')
 
-        # If a tokenized attempt failed, retry this same candidate anonymously.
+        # Non-Colab: if tokenized attempt failed, retry this candidate anonymously.
         if hf_token:
             try:
                 print(f'Retrying anonymously: "{candidate}"')
                 _download_one(candidate, cached_file, model_dir, file_name, hf_token='', progress=progress)
                 return cached_file
             except Exception as e:
+                _remove_partial(cached_file)
                 errors.append(f'{candidate} (anonymous): {e}')
                 print(f'Anonymous retry failed ({e}); trying next source...')
 
     raise RuntimeError('All download attempts failed:\n' + '\n'.join(errors))
+
+
+def _remove_partial(cached_file: str) -> None:
+    if os.path.exists(cached_file):
+        try:
+            os.remove(cached_file)
+        except OSError:
+            pass
+
+
+def _download_with_aria2(
+        url: str,
+        cached_file: str,
+        model_dir: str,
+        file_name: str,
+        *,
+        hf_token: str,
+) -> None:
+    """Resolve with HF token, then fetch the final URL with aria2.
+
+    Authorization is only used while resolving huggingface.co redirects. The CDN
+    signed URL is fetched without the Bearer token (CDN rejects forwarded auth).
+    """
+    download_url = _resolve_download_url(url, hf_token=hf_token)
+    connections = '16' if hf_token else '4'
+    cmd = [
+        'aria2c', '--quiet=true', '-c',
+        '-x', connections, '-s', connections, '-k', '8M',
+        '--retry-wait=2', '--max-tries=5',
+        '-d', model_dir, '-o', file_name, download_url,
+    ]
+    result = subprocess.run(
+        cmd,
+        check=False,
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+    )
+    if result.returncode != 0 or not os.path.exists(cached_file):
+        detail = (result.stderr or '').strip() or f'exit code {result.returncode}'
+        raise RuntimeError(detail[:300])
 
 
 def _download_one(
