@@ -41,9 +41,11 @@ try:
         print("Fast-forward merge")
     elif merge_result & pygit2.GIT_MERGE_ANALYSIS_NORMAL:
         print("Update failed - Did you modify any file?")
+    print('Update succeeded.')
+except ImportError:
+    pass
 except Exception as e:
     print('Update failed.')
     print(str(e))
 
-print('Update succeeded.')
 from launch import *

@@ -14,7 +14,6 @@ from modules.launch_util import run_pip
 COLAB_REQUIREMENTS = [
     'numpy<2.0.0',
     'cupy-cuda12x<14.0',
-    'pygit2==1.15.1',
     'starlette>=0.27.0,<1.0.0',
     'huggingface_hub',
 ]

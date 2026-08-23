@@ -40,7 +40,7 @@ def prepare_environment():
     print(f"Fooocus version: {fooocus_version.version}")
 
     if REINSTALL_ALL or not is_installed("torch") or not is_installed("torchvision"):
-        run(f'"{python}" -m {torch_command}', "Installing torch and torchvision", "Couldn't install torch", live=True)
+        run(f'\"{python}\" -m {torch_command}', "Installing torch and torchvision", "Couldn't install torch", live=True)
 
     if TRY_INSTALL_XFORMERS:
         if REINSTALL_ALL or not is_installed("xformers"):
@@ -58,7 +58,7 @@ def prepare_environment():
                 run_pip(f"install -U -I --no-deps {xformers_package}", "xformers")
 
     if REINSTALL_ALL or not requirements_met(requirements_file):
-        run_pip(f"install -r \"{requirements_file}\"", "requirements")
+        run_pip(f"install -r \"{requirements_file}\"", "requirements", live=True)
 
     return
 
