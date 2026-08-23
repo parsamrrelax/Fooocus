@@ -31,8 +31,10 @@ _GRADIO_WS_CONFIG = '''config = uvicorn.Config(
         ssl_keyfile_password=ssl_keyfile_password,
         ws_max_size=1 * 1024 * 1024 * 1024,  # Setting max websocket size to be 1 GB
         ws_max_queue=64,
-        ws_ping_interval=10.0,
-        ws_ping_timeout=30.0,
+        ws_ping_interval=30.0,
+        ws_ping_timeout=300.0,
+        timeout_keep_alive=300,
+        timeout_notify=300,
         ws_per_message_deflate=False
     )'''
 
@@ -107,22 +109,33 @@ def patch_gradio_websocket_limits():
             print(f'[Colab] Gradio WebSocket limits already patched: {net_path}')
         else:
             pattern = re.compile(
-                r'config\s*=\\s*uvicorn\\.Config\\(\\s*'
-                r'app=app,\\s*'
-                r'port=port,\\s*'
-                r'host=host,\\s*'
-                r'log_level="warning",\\s*'
-                r'ssl_keyfile=ssl_keyfile,\\s*'
-                r'ssl_certfile=ssl_certfile,\\s*'
-                r'ssl_keyfile_password=ssl_keyfile_password,\\s*'
+                r'config\s*=\s*uvicorn\.Config\(\s*'
+                r'app=app,\s*'
+                r'port=port,\s*'
+                r'host=host,\s*'
+                r'log_level="warning",\s*'
+                r'ssl_keyfile=ssl_keyfile,\s*'
+                r'ssl_certfile=ssl_certfile,\s*'
+                r'ssl_keyfile_password=ssl_keyfile_password,\s*'
                 r'.*?'
-                r'\\)',
+                r'\)',
                 re.DOTALL,
             )
             new_text, n = pattern.subn(_GRADIO_WS_CONFIG, text, count=1)
             if n == 1:
                 net_path.write_text(new_text)
                 print(f'[Colab] Patched Gradio WebSocket limits in {net_path}')
+            else:
+                # Fallback: replace uvicorn.Config call directly
+                start_idx = text.find('config = uvicorn.Config(')
+                if start_idx != -1:
+                    end_idx = text.find(')', start_idx)
+                    if end_idx != -1:
+                        patched = text[:start_idx] + _GRADIO_WS_CONFIG + text[end_idx + 1:]
+                        net_path.write_text(patched)
+                        print(f'[Colab] Patched Gradio WebSocket limits (fallback) in {net_path}')
+                else:
+                    print(f'[Colab] Could not patch uvicorn.Config in {net_path}; leaving file unchanged.')
 
     # Fix Gradio 3.x Queue crash: 'AsyncRequest' object has no attribute '_json_response_data'
     utils_path = _gradio_file_path('utils.py')

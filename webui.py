@@ -1,3 +1,4 @@
+import asyncio
 import gradio as gr
 import random
 import os
@@ -30,7 +31,7 @@ def get_task(*args):
 
     return worker.AsyncTask(args=args)
 
-def generate_clicked(task: worker.AsyncTask):
+async def generate_clicked(task: worker.AsyncTask):
     import ldm_patched.modules.model_management as model_management
 
     with model_management.interrupt_processing_mutex:
@@ -51,7 +52,7 @@ def generate_clicked(task: worker.AsyncTask):
     worker.async_tasks.append(task)
 
     while not finished:
-        time.sleep(0.01)
+        await asyncio.sleep(0.01)
         if len(task.yields) > 0:
             flag, product = task.yields.pop(0)
             if flag == 'preview':
