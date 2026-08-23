@@ -9,12 +9,13 @@ from packaging.requirements import Requirement
 
 from modules.launch_util import run_pip
 
-# Colab pre-installs packages (e.g. numpy 2.x) that break Fooocus. Pin them here so
+# Colab pre-installs packages (e.g. numpy 2.x, transformers 5.x) that break Fooocus. Pin them here so
 # `python entry_with_update.py` fixes versions before any heavy imports — no runtime restart.
 COLAB_REQUIREMENTS = [
     'numpy<2.0.0',
     'cupy-cuda12x<14.0',
     'starlette>=0.27.0,<1.0.0',
+    'transformers>=4.42.4,<5.0.0',
     'huggingface_hub',
 ]
 

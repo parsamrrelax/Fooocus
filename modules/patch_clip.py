@@ -1,5 +1,6 @@
 # Consistent with Kohya/A1111 to reduce differences between model training and inference.
 
+import contextlib
 import os
 import torch
 import ldm_patched.controlnet.cldm
@@ -22,6 +23,12 @@ from modules.ops import use_patched_ops
 from transformers import CLIPTextModel, CLIPTextConfig, modeling_utils, CLIPVisionConfig, CLIPVisionModelWithProjection
 
 
+def _no_init_weights():
+    if hasattr(modeling_utils, 'no_init_weights'):
+        return modeling_utils.no_init_weights()
+    return contextlib.nullcontext()
+
+
 def patched_encode_token_weights(self, token_weight_pairs):
     to_encode = list()
     max_token_len = 0
@@ -40,21 +47,17 @@ def patched_encode_token_weights(self, token_weight_pairs):
     if pooled is not None:
         first_pooled = pooled[0:1].to(ldm_patched.modules.model_management.intermediate_device())
     else:
-        first_pooled = pooled
+        first_pooled = None
 
     output = []
     for k in range(0, sections):
         z = out[k:k + 1]
         if has_weights:
-            original_mean = z.mean()
-            z_empty = out[-1]
-            for i in range(len(z)):
-                for j in range(len(z[i])):
-                    weight = token_weight_pairs[k][j][1]
-                    if weight != 1.0:
-                        z[i][j] = (z[i][j] - z_empty[j]) * weight + z_empty[j]
-            new_mean = z.mean()
-            z = z * (original_mean / new_mean)
+            z_empty = out[-1:]
+            for i, p in enumerate(token_weight_pairs[k]):
+                weight = p[1]
+                if weight != 1.0:
+                    z[:, i] = (z[:, i] - z_empty[:, i]) * weight + z_empty[:, i]
         output.append(z)
 
     if len(output) == 0:
@@ -79,7 +82,7 @@ def patched_SDClipModel__init__(self, max_length=77, freeze=True, layer="last", 
     self.num_layers = config.num_hidden_layers
 
     with use_patched_ops(ops.manual_cast):
-        with modeling_utils.no_init_weights():
+        with _no_init_weights():
             self.transformer = CLIPTextModel(config)
 
     if dtype is not None:
@@ -108,9 +111,13 @@ def patched_SDClipModel__init__(self, max_length=77, freeze=True, layer="last", 
 
 def patched_SDClipModel_forward(self, tokens):
     backup_embeds = self.transformer.get_input_embeddings()
-    device = backup_embeds.weight.device
-    tokens = self.set_up_textual_embeddings(tokens, backup_embeds)
-    tokens = torch.LongTensor(tokens).to(device)
+    tokens, self.transformer.text_model.embeddings.token_embedding = \
+        self.set_up_textual_embeddings(tokens, backup_embeds)
+
+    tokens = torch.LongTensor(tokens).to(self.transformer.text_model.embeddings.token_embedding.weight.device)
+
+    if tokens.shape[1] > self.max_length:
+        tokens = tokens[:, :self.max_length]
 
     attention_mask = None
     if self.enable_attention_masks:
@@ -158,7 +165,7 @@ def patched_ClipVisionModel__init__(self, json_config):
         self.dtype = torch.float32
 
     with use_patched_ops(ops.manual_cast):
-        with modeling_utils.no_init_weights():
+        with _no_init_weights():
             self.model = CLIPVisionModelWithProjection(config)
 
     self.model.to(self.dtype)
@@ -187,9 +194,9 @@ def patched_ClipVisionModel_encode_image(self, image):
 
 
 def patch_all_clip():
-    ldm_patched.modules.sd1_clip.ClipTokenWeightEncoder.encode_token_weights = patched_encode_token_weights
     ldm_patched.modules.sd1_clip.SDClipModel.__init__ = patched_SDClipModel__init__
     ldm_patched.modules.sd1_clip.SDClipModel.forward = patched_SDClipModel_forward
+    ldm_patched.modules.sd1_clip.SDClipModel.encode_token_weights = patched_encode_token_weights
     ldm_patched.modules.clip_vision.ClipVisionModel.__init__ = patched_ClipVisionModel__init__
     ldm_patched.modules.clip_vision.ClipVisionModel.encode_image = patched_ClipVisionModel_encode_image
     return
