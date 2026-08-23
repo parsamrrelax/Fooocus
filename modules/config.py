@@ -345,7 +345,7 @@ default_max_lora_number = get_config_item_or_set_default(
 )
 default_cfg_scale = get_config_item_or_set_default(
     key='default_cfg_scale',
-    default_value=7.0,
+    default_value=1.0,
     validator=lambda x: isinstance(x, numbers.Number),
     expected_type=numbers.Number
 )
