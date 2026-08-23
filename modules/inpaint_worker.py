@@ -84,6 +84,9 @@ def regulate_abcd(x, a, b, c, d):
 
 def compute_initial_abcd(x):
     indices = np.where(x)
+    if len(indices[0]) == 0 or len(indices[1]) == 0:
+        H, W = x.shape[:2]
+        return 0, H, 0, W
     a = np.min(indices[0])
     b = np.max(indices[0])
     c = np.min(indices[1])
@@ -137,6 +140,8 @@ def fooocus_fill(image, mask):
     current_image = image.copy()
     raw_image = image.copy()
     area = np.where(mask < 127)
+    if len(area[0]) == 0:
+        return current_image
     store = raw_image[area]
 
     for k, repeats in [(512, 2), (256, 2), (128, 4), (64, 4), (33, 8), (15, 8), (5, 16), (3, 16)]:
@@ -173,9 +178,10 @@ class InpaintWorker:
         if use_fill:
             self.interested_fill = fooocus_fill(self.interested_image, self.interested_mask)
 
-        # soft pixels
+        # soft pixels and original image copy
         self.mask = morphological_open(mask)
-        self.image = image
+        self.original_image = image.copy()
+        self.image = image.copy()
 
         # ending
         self.latent = None
@@ -199,22 +205,26 @@ class InpaintWorker:
             sd = torch.load(inpaint_head_model_path, map_location='cpu', weights_only=True)
             inpaint_head_model.load_state_dict(sd)
 
-        feed = torch.cat([
-            inpaint_latent_mask,
-            model.model.process_latent_in(inpaint_latent)
-        ], dim=1)
+        inpaint_head_model.head.data = inpaint_head_model.head.data.to(device=model.load_device, dtype=torch.float32)
 
-        inpaint_head_model.to(device=feed.device, dtype=feed.dtype)
-        inpaint_head_feature = inpaint_head_model(feed)
+        feed_latent = inpaint_latent.to(device=model.load_device, dtype=torch.float32)
+        feed_latent_mask = inpaint_latent_mask.to(device=model.load_device, dtype=torch.float32)
 
-        def input_block_patch(h, transformer_options):
-            if transformer_options["block"][1] == 0:
-                h = h + inpaint_head_feature.to(h)
+        feed_latent = feed_latent * (1.0 - feed_latent_mask)
+        feed_latent = torch.cat([feed_latent, feed_latent_mask], dim=1)
+
+        self.inpaint_head_feature = inpaint_head_model(feed_latent)
+        self.inpaint_head_feature = self.inpaint_head_feature.to(dtype=model.model.dtype)
+
+        def inpaint_head_input_block_patch(h, transformer_options):
+            del transformer_options
+            if h.shape[1] == self.inpaint_head_feature.shape[1]:
+                h = h + self.inpaint_head_feature
             return h
 
-        m = model.clone()
-        m.set_model_input_block_patch(input_block_patch)
-        return m
+        model = model.clone()
+        model.set_model_input_block_patch(inpaint_head_input_block_patch)
+        return model
 
     def swap(self):
         if self.swapped:
@@ -246,19 +256,18 @@ class InpaintWorker:
 
     def color_correction(self, img):
         fg = img.astype(np.float32)
-        bg = self.image.copy().astype(np.float32)
+        bg = self.original_image.astype(np.float32)
         w = self.mask[:, :, None].astype(np.float32) / 255.0
         y = fg * w + bg * (1 - w)
         return y.clip(0, 255).astype(np.uint8)
 
-    def post_process(self, img):
+    def post_process(self, x):
         a, b, c, d = self.interested_area
-        content = resample_image(img, d - c, b - a)
-        result = self.image.copy()
+        content = resample_image(x, d - c, b - a)
+        result = self.original_image.copy()
         result[a:b, c:d] = content
         result = self.color_correction(result)
         return result
 
     def visualize_mask_processing(self):
         return [self.interested_fill, self.interested_mask, self.interested_image]
-

@@ -865,8 +865,19 @@ def worker():
         if (async_task.current_tab == 'inpaint' or (
                 async_task.current_tab == 'ip' and async_task.mixing_image_prompt_and_inpaint)) \
                 and isinstance(async_task.inpaint_input_image, dict):
-            inpaint_image = async_task.inpaint_input_image['image']
-            inpaint_mask = async_task.inpaint_input_image['mask'][:, :, 0]
+            inpaint_image = async_task.inpaint_input_image.get('image')
+            raw_mask = async_task.inpaint_input_image.get('mask')
+            if raw_mask is not None and isinstance(raw_mask, np.ndarray) and raw_mask.ndim >= 3:
+                inpaint_mask = raw_mask[:, :, 0]
+            elif isinstance(raw_mask, np.ndarray):
+                inpaint_mask = raw_mask
+            else:
+                inpaint_mask = None
+
+            if isinstance(inpaint_image, np.ndarray) and isinstance(inpaint_mask, np.ndarray):
+                if inpaint_image.shape[:2] != inpaint_mask.shape[:2]:
+                    H, W = inpaint_image.shape[:2]
+                    inpaint_mask = resample_image(inpaint_mask, width=W, height=H)
 
             if async_task.inpaint_advanced_masking_checkbox:
                 advanced_masks = []
