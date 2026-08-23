@@ -31,11 +31,9 @@ _GRADIO_WS_CONFIG = '''config = uvicorn.Config(
         ssl_keyfile_password=ssl_keyfile_password,
         ws_max_size=1 * 1024 * 1024 * 1024,  # Setting max websocket size to be 1 GB
         ws_max_queue=64,
-        ws_ping_interval=60.0,
+        ws_ping_interval=10.0,
         ws_ping_timeout=30.0,
-        ws_per_message_deflate=False,
-        reload=True,
-        timeout_notify=300
+        ws_per_message_deflate=False
     )'''
 
 
