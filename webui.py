@@ -50,9 +50,10 @@ async def generate_clicked(task: worker.AsyncTask):
         gr.update(visible=False)
 
     worker.async_tasks.append(task)
+    last_heartbeat_time = time.perf_counter()
 
     while not finished:
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.02)
         if len(task.yields) > 0:
             flag, product = task.yields.pop(0)
             if flag == 'preview':
@@ -64,11 +65,13 @@ async def generate_clicked(task: worker.AsyncTask):
                         continue
 
                 percentage, title, image = product
+                last_heartbeat_time = time.perf_counter()
                 yield gr.update(visible=True, value=modules.html.make_progress_html(percentage, title)), \
                     gr.update(visible=True, value=image) if image is not None else gr.update(), \
                     gr.update(), \
                     gr.update(visible=False)
             if flag == 'results':
+                last_heartbeat_time = time.perf_counter()
                 yield gr.update(visible=True), \
                     gr.update(visible=True), \
                     gr.update(visible=True, value=product), \
@@ -77,6 +80,7 @@ async def generate_clicked(task: worker.AsyncTask):
                 if not args_manager.args.disable_enhance_output_sorting:
                     product = sort_enhance_images(product, task)
 
+                last_heartbeat_time = time.perf_counter()
                 yield gr.update(visible=False), \
                     gr.update(visible=False), \
                     gr.update(visible=False), \
@@ -88,6 +92,12 @@ async def generate_clicked(task: worker.AsyncTask):
                     for filepath in product:
                         if isinstance(filepath, str) and os.path.exists(filepath):
                             os.remove(filepath)
+        else:
+            # Keep WebSocket connection alive through frpc / gradio.live reverse proxies
+            current_time = time.perf_counter()
+            if current_time - last_heartbeat_time >= 2.0:
+                last_heartbeat_time = current_time
+                yield gr.update(), gr.update(), gr.update(), gr.update()
 
     execution_time = time.perf_counter() - execution_start_time
     print(f'Total time: {execution_time:.2f} seconds')
