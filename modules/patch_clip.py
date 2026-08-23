@@ -53,11 +53,15 @@ def patched_encode_token_weights(self, token_weight_pairs):
     for k in range(0, sections):
         z = out[k:k + 1]
         if has_weights:
-            z_empty = out[-1:]
-            for i, p in enumerate(token_weight_pairs[k]):
-                weight = p[1]
-                if weight != 1.0:
-                    z[:, i] = (z[:, i] - z_empty[:, i]) * weight + z_empty[:, i]
+            original_mean = z.mean()
+            z_empty = out[-1]
+            for i in range(len(z)):
+                for j in range(len(z[i])):
+                    weight = token_weight_pairs[k][j][1]
+                    if weight != 1.0:
+                        z[i][j] = (z[i][j] - z_empty[j]) * weight + z_empty[j]
+            new_mean = z.mean()
+            z = z * (original_mean / new_mean)
         output.append(z)
 
     if len(output) == 0:
@@ -111,10 +115,9 @@ def patched_SDClipModel__init__(self, max_length=77, freeze=True, layer="last", 
 
 def patched_SDClipModel_forward(self, tokens):
     backup_embeds = self.transformer.get_input_embeddings()
-    tokens, self.transformer.text_model.embeddings.token_embedding = \
-        self.set_up_textual_embeddings(tokens, backup_embeds)
-
-    tokens = torch.LongTensor(tokens).to(self.transformer.text_model.embeddings.token_embedding.weight.device)
+    device = backup_embeds.weight.device
+    tokens = self.set_up_textual_embeddings(tokens, backup_embeds)
+    tokens = torch.LongTensor(tokens).to(device)
 
     if tokens.shape[1] > self.max_length:
         tokens = tokens[:, :self.max_length]
@@ -196,7 +199,7 @@ def patched_ClipVisionModel_encode_image(self, image):
 def patch_all_clip():
     ldm_patched.modules.sd1_clip.SDClipModel.__init__ = patched_SDClipModel__init__
     ldm_patched.modules.sd1_clip.SDClipModel.forward = patched_SDClipModel_forward
-    ldm_patched.modules.sd1_clip.SDClipModel.encode_token_weights = patched_encode_token_weights
+    ldm_patched.modules.sd1_clip.ClipTokenWeightEncoder.encode_token_weights = patched_encode_token_weights
     ldm_patched.modules.clip_vision.ClipVisionModel.__init__ = patched_ClipVisionModel__init__
     ldm_patched.modules.clip_vision.ClipVisionModel.encode_image = patched_ClipVisionModel_encode_image
     return
