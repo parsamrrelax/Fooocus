@@ -205,26 +205,22 @@ class InpaintWorker:
             sd = torch.load(inpaint_head_model_path, map_location='cpu', weights_only=True)
             inpaint_head_model.load_state_dict(sd)
 
-        inpaint_head_model.head.data = inpaint_head_model.head.data.to(device=model.load_device, dtype=torch.float32)
+        feed = torch.cat([
+            inpaint_latent_mask,
+            model.model.process_latent_in(inpaint_latent)
+        ], dim=1)
 
-        feed_latent = inpaint_latent.to(device=model.load_device, dtype=torch.float32)
-        feed_latent_mask = inpaint_latent_mask.to(device=model.load_device, dtype=torch.float32)
+        inpaint_head_model.to(device=feed.device, dtype=feed.dtype)
+        inpaint_head_feature = inpaint_head_model(feed)
 
-        feed_latent = feed_latent * (1.0 - feed_latent_mask)
-        feed_latent = torch.cat([feed_latent, feed_latent_mask], dim=1)
-
-        self.inpaint_head_feature = inpaint_head_model(feed_latent)
-        self.inpaint_head_feature = self.inpaint_head_feature.to(dtype=model.model.dtype)
-
-        def inpaint_head_input_block_patch(h, transformer_options):
-            del transformer_options
-            if h.shape[1] == self.inpaint_head_feature.shape[1]:
-                h = h + self.inpaint_head_feature
+        def input_block_patch(h, transformer_options):
+            if transformer_options["block"][1] == 0:
+                h = h + inpaint_head_feature.to(h)
             return h
 
-        model = model.clone()
-        model.set_model_input_block_patch(inpaint_head_input_block_patch)
-        return model
+        m = model.clone()
+        m.set_model_input_block_patch(input_block_patch)
+        return m
 
     def swap(self):
         if self.swapped:
