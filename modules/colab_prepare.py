@@ -32,10 +32,10 @@ _GRADIO_WS_CONFIG = '''config = uvicorn.Config(
         ws_max_size=1 * 1024 * 1024 * 1024,  # Setting max websocket size to be 1 GB
         ws_max_queue=64,
         ws_ping_interval=60.0,
-        ws_ping_timeout=10.0,
+        ws_ping_timeout=30.0,
         ws_per_message_deflate=False,
         reload=True,
-        timeout_notify=120
+        timeout_notify=300
     )'''
 
 
@@ -77,19 +77,19 @@ def prepare_colab_environment():
     run_pip(f'install {packages}', desc='Colab dependencies', live=True)
 
 
-def _gradio_networking_path():
-    """Locate gradio/networking.py without importing gradio (avoids Colab kernel breakage)."""
+def _gradio_file_path(filename: str):
+    """Locate any file inside gradio/ package without importing gradio (avoids Colab kernel breakage)."""
     ver = f'{sys.version_info.major}.{sys.version_info.minor}'
     for base in (
         f'/usr/local/lib/python{ver}/dist-packages',
         f'/usr/local/lib/python{ver}/site-packages',
     ):
-        path = Path(base) / 'gradio' / 'networking.py'
+        path = Path(base) / 'gradio' / filename
         if path.is_file():
             return path
     try:
         root = Path(importlib.metadata.distribution('gradio').locate_file(''))
-        path = root / 'gradio' / 'networking.py'
+        path = root / 'gradio' / filename
         if path.is_file():
             return path
     except Exception:
@@ -98,37 +98,42 @@ def _gradio_networking_path():
 
 
 def patch_gradio_websocket_limits():
-    """Raise Gradio/uvicorn WebSocket limits so large image edits do not hit error 1006."""
+    """Raise Gradio/uvicorn WebSocket limits and patch queue resilience so UI does not freeze or disconnect."""
     if not is_colab():
         return
 
-    path = _gradio_networking_path()
-    if path is None:
-        print('[Colab] Gradio networking.py not found; skipping WebSocket patch.')
-        return
+    net_path = _gradio_file_path('networking.py')
+    if net_path is not None:
+        text = net_path.read_text()
+        if _GRADIO_WS_MARKER in text:
+            print(f'[Colab] Gradio WebSocket limits already patched: {net_path}')
+        else:
+            pattern = re.compile(
+                r'config\s*=\\s*uvicorn\\.Config\\(\\s*'
+                r'app=app,\\s*'
+                r'port=port,\\s*'
+                r'host=host,\\s*'
+                r'log_level="warning",\\s*'
+                r'ssl_keyfile=ssl_keyfile,\\s*'
+                r'ssl_certfile=ssl_certfile,\\s*'
+                r'ssl_keyfile_password=ssl_keyfile_password,\\s*'
+                r'.*?'
+                r'\\)',
+                re.DOTALL,
+            )
+            new_text, n = pattern.subn(_GRADIO_WS_CONFIG, text, count=1)
+            if n == 1:
+                net_path.write_text(new_text)
+                print(f'[Colab] Patched Gradio WebSocket limits in {net_path}')
 
-    text = path.read_text()
-    if _GRADIO_WS_MARKER in text:
-        print(f'[Colab] Gradio WebSocket limits already patched: {path}')
-        return
-
-    pattern = re.compile(
-        r'config\s*=\s*uvicorn\.Config\(\s*'
-        r'app=app,\s*'
-        r'port=port,\s*'
-        r'host=host,\s*'
-        r'log_level="warning",\s*'
-        r'ssl_keyfile=ssl_keyfile,\s*'
-        r'ssl_certfile=ssl_certfile,\s*'
-        r'ssl_keyfile_password=ssl_keyfile_password,\s*'
-        r'.*?'
-        r'\)',
-        re.DOTALL,
-    )
-    new_text, n = pattern.subn(_GRADIO_WS_CONFIG, text, count=1)
-    if n != 1:
-        print(f'[Colab] Could not patch uvicorn.Config in {path}; leaving file unchanged.')
-        return
-
-    path.write_text(new_text)
-    print(f'[Colab] Patched Gradio WebSocket limits in {path}')
+    # Fix Gradio 3.x Queue crash: 'AsyncRequest' object has no attribute '_json_response_data'
+    utils_path = _gradio_file_path('utils.py')
+    if utils_path is not None:
+        text = utils_path.read_text()
+        if 'return self._json_response_data' in text:
+            new_text = text.replace(
+                'return self._json_response_data',
+                "return getattr(self, '_json_response_data', {})"
+            )
+            utils_path.write_text(new_text)
+            print(f'[Colab] Patched Gradio AsyncRequest resilience in {utils_path}')

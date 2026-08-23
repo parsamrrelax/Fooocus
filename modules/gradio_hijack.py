@@ -489,3 +489,19 @@ def patched_wait_for(fut, timeout):
 
 gradio.routes.asyncio.wait_for = patched_wait_for
 
+
+# Fix Gradio 3.x Queue crash: 'AsyncRequest' object has no attribute '_json_response_data'
+# which disconnects the UI queue and freezes the frontend at "Processing..." while backend runs.
+if hasattr(utils, 'AsyncRequest'):
+    _orig_async_request_init = getattr(utils.AsyncRequest, '__init__', None)
+    if _orig_async_request_init is not None:
+        def _patched_async_request_init(self, *args, **kwargs):
+            self._json_response_data = {}
+            self.exception = None
+            return _orig_async_request_init(self, *args, **kwargs)
+        utils.AsyncRequest.__init__ = _patched_async_request_init
+
+    def _safe_async_request_json(self):
+        return getattr(self, '_json_response_data', {})
+
+    utils.AsyncRequest.json = property(_safe_async_request_json)
