@@ -31,8 +31,8 @@ def box_blur(x, k):
 
 def max_filter_opencv(x, ksize=3):
     # Use OpenCV maximum filter
-    # Make sure the input type is int16
-    return cv2.dilate(x, np.ones((ksize, ksize), dtype=np.int16))
+    # Kernel must be uint8
+    return cv2.dilate(x, np.ones((ksize, ksize), dtype=np.uint8))
 
 
 def morphological_open(x):

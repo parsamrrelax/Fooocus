@@ -1,7 +1,7 @@
-"""gr.Image() component."""
-
 from __future__ import annotations
 
+import io
+import base64
 import warnings
 from pathlib import Path
 from typing import Any, Literal
@@ -33,6 +33,24 @@ from gradio.interpretation import TokenInterpretable
 
 set_documentation_group("component")
 _Image.init()  # fixes https://github.com/gradio-app/gradio/issues/2843
+
+
+def encode_pil_to_jpeg_base64(im: _Image.Image, quality: int = 75) -> str:
+    buffered = io.BytesIO()
+    if im.mode in ('RGBA', 'LA', 'P'):
+        im = im.convert('RGB')
+    im.save(buffered, format="JPEG", quality=quality)
+    img_str = base64.b64encode(buffered.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{img_str}"
+
+
+def encode_array_to_jpeg_base64(arr: np.ndarray, quality: int = 75) -> str:
+    im = _Image.fromarray(arr)
+    return encode_pil_to_jpeg_base64(im, quality=quality)
+
+
+processing_utils.encode_pil_to_base64 = encode_pil_to_jpeg_base64
+processing_utils.encode_array_to_base64 = encode_array_to_jpeg_base64
 
 
 @document()
