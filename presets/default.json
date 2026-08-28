@@ -5,13 +5,13 @@
     "default_loras": [
         [
             true,
-            "None",
-            1.0
+            "breastpack.safetensors",
+            0.8
         ],
         [
             true,
-            "None",
-            1.0
+            "realpussy.safetensors",
+            0.8
         ],
         [
             true,
@@ -35,7 +35,7 @@
     "default_scheduler": "karras",
     "default_performance": "Speed",
     "default_prompt": "",
-    "default_prompt_negative": "",
+    "default_prompt_negative": "text, watermark, large breasts, fat, chubby",
     "default_styles": [
         "Fooocus V2",
         "Fooocus Enhance",
