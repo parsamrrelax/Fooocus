@@ -12,10 +12,10 @@ from modules.launch_util import run_pip
 # Colab pre-installs packages (e.g. numpy 2.x, transformers 5.x) that break Fooocus. Pin them here so
 # `python entry_with_update.py` fixes versions before any heavy imports — no runtime restart.
 COLAB_REQUIREMENTS = [
-    'numpy<2.0.0',
+    'numpy==1.26.4',
     'cupy-cuda12x<14.0',
     'starlette>=0.27.0,<1.0.0',
-    'transformers>=4.42.4,<5.0.0',
+    'transformers>=4.42.4,<4.45.0',
     'huggingface_hub',
 ]
 
@@ -73,7 +73,7 @@ def prepare_colab_environment():
         return
 
     print('[Colab] Installing pinned dependencies (no runtime restart needed when launched via python)...')
-    packages = ' '.join(f'"{req}"' for req in COLAB_REQUIREMENTS)
+    packages = ' '.join(f'\"{req}\"' for req in COLAB_REQUIREMENTS)
     run_pip(f'install {packages}', desc='Colab dependencies', live=True)
 
 
