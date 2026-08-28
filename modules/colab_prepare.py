@@ -13,7 +13,6 @@ from modules.launch_util import run_pip
 # `python entry_with_update.py` fixes versions before any heavy imports — no runtime restart.
 COLAB_REQUIREMENTS = [
     'numpy==1.26.4',
-    'cupy-cuda12x<14.0',
     'starlette>=0.27.0,<1.0.0',
     'transformers>=4.42.4,<4.45.0',
     'huggingface_hub',
@@ -43,6 +42,10 @@ def is_colab():
     return 'COLAB_RELEASE_TAG' in os.environ
 
 
+def is_in_venv():
+    return sys.prefix != getattr(sys, 'base_prefix', sys.prefix)
+
+
 def colab_requirements_met():
     for req_str in COLAB_REQUIREMENTS:
         requirement = Requirement(req_str)
@@ -64,9 +67,17 @@ def prepare_colab_environment():
     if not is_colab():
         return
 
+    # Fix Colab's MPLBACKEND environment variable for non-interactive backend
+    if os.environ.get('MPLBACKEND') == 'module://matplotlib_inline.backend_inline':
+        os.environ['MPLBACKEND'] = 'Agg'
+
     # Colab runs on GCP; Hugging Face Xet CDN (us.gcp.cdn.hf.co) often returns 403.
     # Disable Xet so downloads use the regular Hub/LFS path instead.
     os.environ['HF_HUB_DISABLE_XET'] = '1'
+
+    # If running inside an isolated virtual environment (e.g. uv venv), dependencies are already managed
+    if is_in_venv():
+        return
 
     if colab_requirements_met():
         print('[Colab] Dependency versions OK.')

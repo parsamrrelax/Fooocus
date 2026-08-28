@@ -1,6 +1,9 @@
 import os
 import sys
 
+# Override Colab's default interactive matplotlib backend which causes errors in standalone python / virtualenv
+if os.environ.get('MPLBACKEND') == 'module://matplotlib_inline.backend_inline':
+    os.environ['MPLBACKEND'] = 'Agg'
 
 root = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(root)
@@ -38,14 +41,17 @@ try:
         repo.head.set_target(remote_commit.id)
         repo.checkout_tree(repo.get(remote_commit.id))
         repo.reset(local_branch.target, pygit2.GIT_RESET_HARD)
-        print("Fast-forward merge")
-    elif merge_result & pygit2.GIT_MERGE_ANALYSIS_NORMAL:
-        print("Update failed - Did you modify any file?")
-    print('Update succeeded.')
-except ImportError:
-    pass
+        print("Update succeeded.")
+    else:
+        print("Cannot fast-forward, merging is required.")
+
 except Exception as e:
-    print('Update failed.')
-    print(str(e))
+    pass
+
+from modules.launch_util import is_installed
+
+if not is_installed("torch") or not is_installed("torchvision"):
+    print("Torch is not installed. Please run the setup script.")
+    sys.exit(1)
 
 from launch import *
