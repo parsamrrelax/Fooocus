@@ -271,6 +271,10 @@ with shared.gradio_root:
                             with gr.Column():
                                 inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
                                 inpaint_mask_eraser = gr.Checkbox(label='Use mask eraser', value=False)
+                                inpaint_smart_brush = gr.Checkbox(label='Use smart edge brush (auto-snapping)', value=modules.config.default_inpaint_smart_brush)
+                                with gr.Row(visible=modules.config.default_inpaint_smart_brush) as inpaint_smart_brush_row:
+                                    smart_brush_tolerance = gr.Slider(label='Smart Brush Tolerance', minimum=1, maximum=100, value=modules.config.default_inpaint_smart_brush_tolerance, step=1, info='Tolerance to color differences. Higher includes more lighting/shades; lower stays strictly on exact color.')
+                                    snap_brush_button = gr.Button(value='Snap Mask to Edges Now')
                                 inpaint_advanced_masking_checkbox = gr.Checkbox(label='Enable Advanced Masking Features', value=modules.config.default_inpaint_advanced_masking_checkbox)
                                 inpaint_mode = gr.Dropdown(choices=modules.flags.inpaint_options, value=modules.config.default_inpaint_method, label='Method')
                                 inpaint_additional_prompt = gr.Textbox(placeholder="Describe what you want to inpaint.", elem_id='inpaint_additional_prompt', label='Inpaint Additional Prompt', visible=False)
@@ -281,6 +285,29 @@ with shared.gradio_root:
                                                                      visible=False)
                                 gr.HTML('* Powered by Fooocus Inpaint Engine <a href="https://github.com/lllyasviel/Fooocus/discussions/414" target="_blank">\U0001F4D4 Documentation</a>')
                                 example_inpaint_prompts.click(lambda x: x[0], inputs=example_inpaint_prompts, outputs=inpaint_additional_prompt, show_progress=False, queue=False)
+
+                                inpaint_smart_brush.change(lambda x: gr.update(visible=x), inputs=inpaint_smart_brush, outputs=inpaint_smart_brush_row, queue=False, show_progress=False)
+
+                                def trigger_smart_brush_snap(image_dict, tolerance, use_eraser):
+                                    import numpy as np
+                                    if not isinstance(image_dict, dict):
+                                        return gr.update()
+                                    img = image_dict.get('image')
+                                    mask = image_dict.get('mask')
+                                    if img is None or mask is None or not np.any(mask > 0):
+                                        return gr.update()
+                                    from modules.smart_brush import smart_edge_snap, mask_to_rgba
+                                    snapped = smart_edge_snap(img, mask, tolerance=tolerance, expand=True, use_eraser=use_eraser)
+                                    rgba = mask_to_rgba(snapped)
+                                    return {'image': img, 'mask': rgba}
+
+                                snap_brush_button.click(
+                                    fn=trigger_smart_brush_snap,
+                                    inputs=[inpaint_input_image, smart_brush_tolerance, inpaint_mask_eraser],
+                                    outputs=inpaint_input_image,
+                                    queue=False,
+                                    show_progress=True
+                                )
 
                             with gr.Column(visible=modules.config.default_inpaint_advanced_masking_checkbox) as inpaint_mask_generation_col:
                                 inpaint_mask_image = grh.Image(label='Mask Upload', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", mask_opacity=1, elem_id='inpaint_mask_canvas')
@@ -906,15 +933,25 @@ with shared.gradio_root:
                                                                  outputs=[inpaint_mask_image, inpaint_mask_generation_col],
                                                                  queue=False, show_progress=False)
 
-                        def update_inpaint_brush(brush_color, use_eraser):
-                            inpaint_color = '#000000' if use_eraser else brush_color
-                            advanced_mask_color = '#FFFFFF' if use_eraser else brush_color
+                        def update_inpaint_brush(brush_color, use_eraser, smart_brush):
+                            if use_eraser:
+                                inpaint_color = '#000000'
+                                advanced_mask_color = '#FFFFFF'
+                            elif smart_brush:
+                                inpaint_color = '#29B6F6'
+                                advanced_mask_color = brush_color
+                            else:
+                                inpaint_color = brush_color
+                                advanced_mask_color = brush_color
                             return gr.update(brush_color=inpaint_color), gr.update(brush_color=advanced_mask_color)
 
-                        inpaint_mask_color.change(update_inpaint_brush, inputs=[inpaint_mask_color, inpaint_mask_eraser],
+                        inpaint_mask_color.change(update_inpaint_brush, inputs=[inpaint_mask_color, inpaint_mask_eraser, inpaint_smart_brush],
                                                   outputs=[inpaint_input_image, inpaint_mask_image],
                                                   queue=False, show_progress=False)
-                        inpaint_mask_eraser.change(update_inpaint_brush, inputs=[inpaint_mask_color, inpaint_mask_eraser],
+                        inpaint_mask_eraser.change(update_inpaint_brush, inputs=[inpaint_mask_color, inpaint_mask_eraser, inpaint_smart_brush],
+                                                   outputs=[inpaint_input_image, inpaint_mask_image],
+                                                   queue=False, show_progress=False)
+                        inpaint_smart_brush.change(update_inpaint_brush, inputs=[inpaint_mask_color, inpaint_mask_eraser, inpaint_smart_brush],
                                                    outputs=[inpaint_input_image, inpaint_mask_image],
                                                    queue=False, show_progress=False)
 
@@ -1073,7 +1110,7 @@ with shared.gradio_root:
         ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls
         ctrls += [input_image_checkbox, current_tab]
         ctrls += [uov_method, uov_input_image]
-        ctrls += [outpaint_selections, inpaint_input_image, inpaint_additional_prompt, inpaint_mask_image, inpaint_generated_mask, inpaint_mask_eraser]
+        ctrls += [outpaint_selections, inpaint_input_image, inpaint_additional_prompt, inpaint_mask_image, inpaint_generated_mask, inpaint_mask_eraser, inpaint_smart_brush, smart_brush_tolerance]
         ctrls += [disable_preview, disable_intermediate_results, disable_seed_increment, black_out_nsfw]
         ctrls += [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg, clip_skip]
         ctrls += [sampler_name, scheduler_name, vae_name]

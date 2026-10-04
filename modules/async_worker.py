@@ -58,6 +58,8 @@ class AsyncTask:
         self.inpaint_mask_image_upload = args.pop()
         self.inpaint_generated_mask = args.pop()
         self.inpaint_mask_eraser = args.pop()
+        self.inpaint_smart_brush = args.pop()
+        self.inpaint_smart_brush_tolerance = args.pop()
 
         self.disable_preview = args.pop()
         self.disable_intermediate_results = args.pop()
@@ -878,6 +880,17 @@ def worker():
                 if inpaint_image.shape[:2] != inpaint_mask.shape[:2]:
                     H, W = inpaint_image.shape[:2]
                     inpaint_mask = resample_image(inpaint_mask, width=W, height=H)
+
+                if async_task.inpaint_smart_brush and np.any(inpaint_mask > 127):
+                    from modules.smart_brush import smart_edge_snap
+                    print(f'[Smart Brush] Snapping mask to object edges (tolerance={async_task.inpaint_smart_brush_tolerance})...')
+                    inpaint_mask = smart_edge_snap(
+                        image_rgb=inpaint_image,
+                        stroke_mask=inpaint_mask,
+                        tolerance=async_task.inpaint_smart_brush_tolerance,
+                        expand=True,
+                        use_eraser=async_task.inpaint_mask_eraser
+                    )
 
             if async_task.inpaint_advanced_masking_checkbox:
                 advanced_masks = []

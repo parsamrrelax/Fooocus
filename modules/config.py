@@ -556,6 +556,18 @@ default_inpaint_advanced_masking_checkbox = get_config_item_or_set_default(
     validator=lambda x: isinstance(x, bool),
     expected_type=bool
 )
+default_inpaint_smart_brush = get_config_item_or_set_default(
+    key='default_inpaint_smart_brush',
+    default_value=False,
+    validator=lambda x: isinstance(x, bool),
+    expected_type=bool
+)
+default_inpaint_smart_brush_tolerance = get_config_item_or_set_default(
+    key='default_inpaint_smart_brush_tolerance',
+    default_value=50,
+    validator=lambda x: isinstance(x, int) and 1 <= x <= 100,
+    expected_type=int
+)
 default_inpaint_method = get_config_item_or_set_default(
     key='default_inpaint_method',
     default_value=modules.flags.inpaint_option_default,
