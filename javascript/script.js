@@ -261,3 +261,36 @@ function htmlDecode(input) {
   var doc = new DOMParser().parseFromString(input, "text/html");
   return doc.documentElement.textContent;
 }
+
+function applySmartBrushMaskToCanvas(maskData) {
+    if (!maskData || typeof maskData !== 'string' || !maskData.startsWith('data:image/')) {
+        const elem = gradioApp().querySelector("#smart_brush_output textarea") || gradioApp().querySelector("#smart_brush_output input");
+        if (elem && elem.value && elem.value.startsWith('data:image/')) {
+            maskData = elem.value;
+        }
+    }
+    if (!maskData || typeof maskData !== 'string' || !maskData.startsWith('data:image/')) {
+        return;
+    }
+    let canvas = gradioApp().querySelector("#inpaint_canvas canvas[key='interface']");
+    if (!canvas) {
+        const canvases = gradioApp().querySelectorAll("#inpaint_canvas canvas");
+        if (canvases.length > 0) {
+            canvas = canvases[canvases.length - 1];
+        }
+    }
+    if (!canvas) {
+        console.warn("[Smart Brush] Canvas interface not found");
+        return;
+    }
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = function() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.dispatchEvent(new Event('input', { bubbles: true }));
+        canvas.dispatchEvent(new Event('change', { bubbles: true }));
+        console.log("[Smart Brush] Canvas mask updated to snapped shape");
+    };
+    img.src = maskData;
+}

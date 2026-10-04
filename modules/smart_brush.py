@@ -15,6 +15,22 @@ def mask_to_rgba(mask):
     return rgba
 
 
+def mask_to_data_url(mask):
+    """Convert binary mask (0/255) to base64 PNG data URL."""
+    if mask is None:
+        return ''
+    rgba = mask_to_rgba(mask)
+    if rgba is None:
+        return ''
+    import io, base64
+    from PIL import Image
+    pil_img = Image.fromarray(rgba, mode='RGBA')
+    buf = io.BytesIO()
+    pil_img.save(buf, format='PNG')
+    b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    return f'data:image/png;base64,{b64}'
+
+
 def extract_2d_mask(mask):
     """Normalize any mask representation to a 2D uint8 array."""
     if mask is None:

@@ -288,25 +288,35 @@ with shared.gradio_root:
 
                                 inpaint_smart_brush.change(lambda x: gr.update(visible=x), inputs=inpaint_smart_brush, outputs=inpaint_smart_brush_row, queue=False, show_progress=False)
 
+                                smart_brush_output = gr.Textbox(visible=False, elem_id='smart_brush_output')
+
                                 def trigger_smart_brush_snap(image_dict, tolerance, use_eraser):
                                     import numpy as np
                                     if not isinstance(image_dict, dict):
-                                        return gr.update()
+                                        return gr.update(), ""
                                     img = image_dict.get('image')
                                     mask = image_dict.get('mask')
                                     if img is None or mask is None or not np.any(mask > 0):
-                                        return gr.update()
-                                    from modules.smart_brush import smart_edge_snap, mask_to_rgba
+                                        return gr.update(), ""
+                                    from modules.smart_brush import smart_edge_snap, mask_to_rgba, mask_to_data_url
                                     snapped = smart_edge_snap(img, mask, tolerance=tolerance, expand=True, use_eraser=use_eraser)
                                     rgba = mask_to_rgba(snapped)
-                                    return {'image': img, 'mask': rgba}
+                                    data_url = mask_to_data_url(snapped)
+                                    return {'image': img, 'mask': rgba}, data_url
 
                                 snap_brush_button.click(
                                     fn=trigger_smart_brush_snap,
                                     inputs=[inpaint_input_image, smart_brush_tolerance, inpaint_mask_eraser],
-                                    outputs=inpaint_input_image,
+                                    outputs=[inpaint_input_image, smart_brush_output],
                                     queue=False,
                                     show_progress=True
+                                ).then(
+                                    fn=None,
+                                    inputs=smart_brush_output,
+                                    outputs=None,
+                                    _js='(maskData) => applySmartBrushMaskToCanvas(maskData)',
+                                    queue=False,
+                                    show_progress=False
                                 )
 
                             with gr.Column(visible=modules.config.default_inpaint_advanced_masking_checkbox) as inpaint_mask_generation_col:
