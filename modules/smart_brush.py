@@ -31,6 +31,75 @@ def mask_to_data_url(mask):
     return f'data:image/png;base64,{b64}'
 
 
+def hex_to_rgb(hex_str):
+    """Convert hex string (e.g. '#FFCC00') to (R, G, B) tuple."""
+    hex_str = str(hex_str).lstrip('#')
+    if len(hex_str) == 3:
+        hex_str = ''.join([c * 2 for c in hex_str])
+    if len(hex_str) != 6:
+        return (255, 255, 255)
+    try:
+        return tuple(int(hex_str[i:i + 2], 16) for i in (0, 2, 4))
+    except Exception:
+        return (255, 255, 255)
+
+
+def select_color_range(image_rgb, target_hex, fuzziness=30, lightness_weight=0.4, mode='replace', existing_mask=None):
+    """
+    Photoshop-like Color Range selection.
+    Finds all pixels in image_rgb whose perceptual LAB color distance to target_hex is within fuzziness.
+
+    Parameters:
+        image_rgb: (H, W, 3) numpy array uint8 RGB image
+        target_hex: hex color string (e.g. '#FFD700') or RGB tuple
+        fuzziness: int 1-100 (range of similar shades to include)
+        lightness_weight: float, scales lightness difference to allow natural shading/highlight tolerance
+        mode: 'replace', 'add', or 'subtract'
+        existing_mask: optional (H, W) numpy array uint8 mask
+    """
+    if image_rgb is None:
+        return existing_mask
+    H, W = image_rgb.shape[:2]
+
+    target_rgb = hex_to_rgb(target_hex) if isinstance(target_hex, str) else target_hex
+    target_bgr = np.array([[[target_rgb[2], target_rgb[1], target_rgb[0]]]], dtype=np.uint8)
+    target_lab = cv2.cvtColor(target_bgr, cv2.COLOR_BGR2LAB).astype(np.float32)[0, 0]
+
+    img_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
+    img_lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB).astype(np.float32)
+
+    dL = (img_lab[:, :, 0] - target_lab[0]) * lightness_weight
+    dA = img_lab[:, :, 1] - target_lab[1]
+    dB = img_lab[:, :, 2] - target_lab[2]
+    dist = np.sqrt(dL ** 2 + dA ** 2 + dB ** 2)
+
+    # Scale fuzziness (1-100) to delta E threshold (approx 4.0 to 75.0)
+    threshold = 4.0 + (float(fuzziness) / 100.0) * 70.0
+    new_mask = (dist <= threshold).astype(np.uint8) * 255
+
+    # Small morphological opening to clean stray pixel noise
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    new_mask = cv2.morphologyEx(new_mask, cv2.MORPH_OPEN, kernel)
+
+    base_mask = extract_2d_mask(existing_mask)
+    if base_mask is not None:
+        if base_mask.shape[:2] != (H, W):
+            base_mask = cv2.resize(base_mask, (W, H), interpolation=cv2.INTER_NEAREST)
+    else:
+        base_mask = np.zeros((H, W), dtype=np.uint8)
+
+    mode = str(mode).lower()
+    if mode == 'add':
+        result_mask = np.maximum(base_mask, new_mask)
+    elif mode == 'subtract':
+        result_mask = base_mask.copy()
+        result_mask[new_mask > 127] = 0
+    else:  # replace
+        result_mask = new_mask
+
+    return result_mask
+
+
 def extract_2d_mask(mask):
     """Normalize any mask representation to a 2D uint8 array."""
     if mask is None:

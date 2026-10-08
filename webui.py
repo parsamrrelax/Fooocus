@@ -275,6 +275,15 @@ with shared.gradio_root:
                                 with gr.Row(visible=modules.config.default_inpaint_smart_brush) as inpaint_smart_brush_row:
                                     smart_brush_tolerance = gr.Slider(label='Smart Brush Tolerance', minimum=1, maximum=100, value=modules.config.default_inpaint_smart_brush_tolerance, step=1, info='Tolerance to color differences. Higher includes more lighting/shades; lower stays strictly on exact color.')
                                     snap_brush_button = gr.Button(value='Snap Mask to Edges Now')
+                                inpaint_color_range = gr.Checkbox(label='Use Color Range selection (Photoshop-like)', value=modules.config.default_inpaint_color_range)
+                                with gr.Column(visible=modules.config.default_inpaint_color_range) as inpaint_color_range_col:
+                                    with gr.Row():
+                                        color_range_picker = gr.ColorPicker(label='Sampled Color', value='#FFD700', elem_id='color_range_picker')
+                                        pick_color_btn = gr.Button(value='Pick Color from Image', elem_id='pick_color_btn')
+                                    color_range_fuzziness = gr.Slider(label='Fuzziness / Range', minimum=1, maximum=100, value=modules.config.default_inpaint_color_range_fuzziness, step=1, info='Higher values select a broader range of similar shades; lower values stay strictly on the exact shade.')
+                                    with gr.Row():
+                                        color_range_mode = gr.Radio(label='Mode', choices=['Replace', 'Add', 'Subtract'], value='Replace', container=False)
+                                        apply_color_range_btn = gr.Button(value='Select Color Range', elem_id='apply_color_range_btn')
                                 inpaint_advanced_masking_checkbox = gr.Checkbox(label='Enable Advanced Masking Features', value=modules.config.default_inpaint_advanced_masking_checkbox)
                                 inpaint_mode = gr.Dropdown(choices=modules.flags.inpaint_options, value=modules.config.default_inpaint_method, label='Method')
                                 inpaint_additional_prompt = gr.Textbox(placeholder="Describe what you want to inpaint.", elem_id='inpaint_additional_prompt', label='Inpaint Additional Prompt', visible=False)
@@ -310,6 +319,61 @@ with shared.gradio_root:
                                     outputs=[inpaint_input_image, smart_brush_output],
                                     queue=False,
                                     show_progress=True
+                                ).then(
+                                    fn=None,
+                                    inputs=smart_brush_output,
+                                    outputs=None,
+                                    _js='(maskData) => applySmartBrushMaskToCanvas(maskData)',
+                                    queue=False,
+                                    show_progress=False
+                                )
+
+                                inpaint_color_range.change(lambda x: gr.update(visible=x), inputs=inpaint_color_range, outputs=inpaint_color_range_col, queue=False, show_progress=False)
+
+                                pick_color_btn.click(fn=None, _js='() => pickColorFromCanvas()', queue=False, show_progress=False)
+
+                                def trigger_color_range(image_dict, target_color, fuzziness, mode):
+                                    import numpy as np
+                                    if not isinstance(image_dict, dict):
+                                        return gr.update(), ""
+                                    img = image_dict.get('image')
+                                    mask = image_dict.get('mask')
+                                    if img is None:
+                                        return gr.update(), ""
+                                    from modules.smart_brush import select_color_range, mask_to_rgba, mask_to_data_url
+                                    selected_mask = select_color_range(
+                                        image_rgb=img,
+                                        target_hex=target_color,
+                                        fuzziness=fuzziness,
+                                        lightness_weight=0.4,
+                                        mode=mode.lower(),
+                                        existing_mask=mask
+                                    )
+                                    rgba = mask_to_rgba(selected_mask)
+                                    data_url = mask_to_data_url(selected_mask)
+                                    return {'image': img, 'mask': rgba}, data_url
+
+                                apply_color_range_btn.click(
+                                    fn=trigger_color_range,
+                                    inputs=[inpaint_input_image, color_range_picker, color_range_fuzziness, color_range_mode],
+                                    outputs=[inpaint_input_image, smart_brush_output],
+                                    queue=False,
+                                    show_progress=True
+                                ).then(
+                                    fn=None,
+                                    inputs=smart_brush_output,
+                                    outputs=None,
+                                    _js='(maskData) => applySmartBrushMaskToCanvas(maskData)',
+                                    queue=False,
+                                    show_progress=False
+                                )
+
+                                color_range_fuzziness.release(
+                                    fn=trigger_color_range,
+                                    inputs=[inpaint_input_image, color_range_picker, color_range_fuzziness, color_range_mode],
+                                    outputs=[inpaint_input_image, smart_brush_output],
+                                    queue=False,
+                                    show_progress=False
                                 ).then(
                                     fn=None,
                                     inputs=smart_brush_output,

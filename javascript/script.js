@@ -294,3 +294,100 @@ function applySmartBrushMaskToCanvas(maskData) {
     };
     img.src = maskData;
 }
+
+async function pickColorFromCanvas() {
+    // 1. Try modern browser EyeDropper API first (instant, works across Chromium-based browsers)
+    if (window.EyeDropper) {
+        try {
+            const dropper = new EyeDropper();
+            const result = await dropper.open();
+            if (result && result.sRGBHex) {
+                setColorRangePickerHex(result.sRGBHex);
+                return;
+            }
+        } catch (e) {
+            if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+            console.log("[Color Range] EyeDropper API fallback:", e);
+        }
+    }
+
+    // 2. Fallback: activate click listener directly on the inpaint canvas
+    const container = gradioApp().querySelector("#inpaint_canvas");
+    if (!container) return;
+
+    container.style.cursor = "crosshair";
+    const statusMsg = document.createElement("div");
+    statusMsg.id = "eyedropper_status_tip";
+    statusMsg.innerText = "Click on the image to sample color (Esc to cancel)";
+    statusMsg.style.cssText = "position:absolute;top:10px;left:10px;z-index:9999;background:rgba(0,0,0,0.85);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;pointer-events:none;box-shadow:0 2px 6px rgba(0,0,0,0.5);";
+    container.appendChild(statusMsg);
+
+    function cleanup() {
+        container.style.cursor = "";
+        const tip = document.getElementById("eyedropper_status_tip");
+        if (tip) tip.remove();
+        window.removeEventListener("keydown", onKey);
+        container.removeEventListener("click", onClick, true);
+    }
+
+    function onKey(e) {
+        if (e.key === "Escape") cleanup();
+    }
+
+    function onClick(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const img = container.querySelector("img");
+        let hex = null;
+
+        if (img && img.complete && img.naturalWidth > 0) {
+            const rect = img.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) * (img.naturalWidth / rect.width));
+            const y = Math.floor((e.clientY - rect.top) * (img.naturalHeight / rect.height));
+            if (x >= 0 && x < img.naturalWidth && y >= 0 && y < img.naturalHeight) {
+                const offscreen = document.createElement("canvas");
+                offscreen.width = img.naturalWidth;
+                offscreen.height = img.naturalHeight;
+                const ctx = offscreen.getContext("2d");
+                ctx.drawImage(img, 0, 0);
+                const p = ctx.getImageData(x, y, 1, 1).data;
+                hex = "#" + ((1 << 24) + (p[0] << 16) + (p[1] << 8) + p[2]).toString(16).slice(1);
+            }
+        }
+
+        if (!hex) {
+            const canvas = container.querySelector("canvas");
+            if (canvas) {
+                const rect = canvas.getBoundingClientRect();
+                const x = Math.floor((e.clientX - rect.left) * (canvas.width / rect.width));
+                const y = Math.floor((e.clientY - rect.top) * (canvas.height / rect.height));
+                const ctx = canvas.getContext("2d");
+                const p = ctx.getImageData(x, y, 1, 1).data;
+                hex = "#" + ((1 << 24) + (p[0] << 16) + (p[1] << 8) + p[2]).toString(16).slice(1);
+            }
+        }
+
+        cleanup();
+
+        if (hex) {
+            setColorRangePickerHex(hex);
+        }
+    }
+
+    window.addEventListener("keydown", onKey);
+    container.addEventListener("click", onClick, true);
+}
+
+function setColorRangePickerHex(hex) {
+    const picker = gradioApp().querySelector("#color_range_picker input");
+    if (picker) {
+        picker.value = hex;
+        picker.dispatchEvent(new Event("input", { bubbles: true }));
+        picker.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    const applyBtn = gradioApp().querySelector("#apply_color_range_btn");
+    if (applyBtn) {
+        setTimeout(() => applyBtn.click(), 100);
+    }
+}
