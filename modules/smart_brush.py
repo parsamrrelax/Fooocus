@@ -107,10 +107,7 @@ def extract_2d_mask(mask):
     if isinstance(mask, np.ndarray):
         if mask.ndim == 3:
             if mask.shape[2] == 4:
-                # RGBA: take alpha channel if present and valid
-                alpha = mask[:, :, 3]
-                if np.any(alpha > 0):
-                    return (alpha > 127).astype(np.uint8) * 255
+                return (mask[:, :, 3] > 127).astype(np.uint8) * 255
             return (mask[:, :, 0] > 127).astype(np.uint8) * 255
         elif mask.ndim == 2:
             return (mask > 127).astype(np.uint8) * 255

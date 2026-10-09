@@ -343,14 +343,16 @@ with shared.gradio_root:
                                     if isinstance(image_dict, dict):
                                         img = image_dict.get('image')
                                         mask = image_dict.get('mask')
+                                    elif isinstance(image_dict, np.ndarray):
+                                        img = image_dict
                                     if img is None:
                                         img = prev_img
                                     if img is None:
-                                        return "", prev_mask, prev_img, 'inpaint'
+                                        return gr.update(), "", prev_mask, prev_img, 'inpaint'
                                     if mask is None:
                                         mask = prev_mask
 
-                                    from modules.smart_brush import select_color_range, mask_to_data_url
+                                    from modules.smart_brush import select_color_range, mask_to_rgba, mask_to_data_url
                                     selected_mask = select_color_range(
                                         image_rgb=img,
                                         target_hex=target_color,
@@ -359,13 +361,14 @@ with shared.gradio_root:
                                         mode=mode.lower(),
                                         existing_mask=mask
                                     )
+                                    rgba = mask_to_rgba(selected_mask)
                                     data_url = mask_to_data_url(selected_mask)
-                                    return data_url, selected_mask, img, 'inpaint'
+                                    return {'image': img, 'mask': rgba}, data_url, selected_mask, img, 'inpaint'
 
                                 apply_color_range_btn.click(
                                     fn=trigger_color_range,
                                     inputs=[inpaint_input_image, color_range_picker, color_range_fuzziness, color_range_mode, inpaint_color_range_mask, inpaint_color_range_image],
-                                    outputs=[smart_brush_output, inpaint_color_range_mask, inpaint_color_range_image, current_tab],
+                                    outputs=[inpaint_input_image, smart_brush_output, inpaint_color_range_mask, inpaint_color_range_image, current_tab],
                                     queue=False,
                                     show_progress=True
                                 ).then(
@@ -380,7 +383,7 @@ with shared.gradio_root:
                                 color_range_fuzziness.release(
                                     fn=trigger_color_range,
                                     inputs=[inpaint_input_image, color_range_picker, color_range_fuzziness, color_range_mode, inpaint_color_range_mask, inpaint_color_range_image],
-                                    outputs=[smart_brush_output, inpaint_color_range_mask, inpaint_color_range_image, current_tab],
+                                    outputs=[inpaint_input_image, smart_brush_output, inpaint_color_range_mask, inpaint_color_range_image, current_tab],
                                     queue=False,
                                     show_progress=False
                                 ).then(

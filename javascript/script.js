@@ -290,24 +290,6 @@ function applySmartBrushMaskToCanvas(maskData) {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         canvas.dispatchEvent(new Event('input', { bubbles: true }));
         canvas.dispatchEvent(new Event('change', { bubbles: true }));
-
-        // Simulate pointer & mouse down/up to trigger Svelte/Gradio internal sketch state synchronization
-        try {
-            const rect = canvas.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
-            const pointerDown = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, pointerType: 'mouse' });
-            const pointerUp = new PointerEvent('pointerup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, pointerType: 'mouse' });
-            const mouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: cx, clientY: cy });
-            const mouseUp = new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: cx, clientY: cy });
-            canvas.dispatchEvent(pointerDown);
-            canvas.dispatchEvent(pointerUp);
-            canvas.dispatchEvent(mouseDown);
-            canvas.dispatchEvent(mouseUp);
-        } catch (e) {
-            console.log("[Smart Brush] Canvas event dispatch info:", e);
-        }
-
         console.log("[Smart Brush] Canvas mask updated to snapped shape");
     };
     img.src = maskData;
