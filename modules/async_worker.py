@@ -60,6 +60,12 @@ class AsyncTask:
         self.inpaint_mask_eraser = args.pop()
         self.inpaint_smart_brush = args.pop()
         self.inpaint_smart_brush_tolerance = args.pop()
+        self.inpaint_color_range = args.pop()
+        self.color_range_picker = args.pop()
+        self.color_range_fuzziness = args.pop()
+        self.color_range_mode = args.pop()
+        self.inpaint_color_range_mask = args.pop()
+        self.inpaint_color_range_image = args.pop()
 
         self.disable_preview = args.pop()
         self.disable_intermediate_results = args.pop()
@@ -864,17 +870,58 @@ def worker():
             async_task.uov_input_image, skip_prompt_processing, async_task.steps = prepare_upscale(
                 async_task, goals, async_task.uov_input_image, async_task.uov_method, async_task.performance_selection,
                 async_task.steps, 1, skip_prompt_processing=skip_prompt_processing)
+        has_color_range = getattr(async_task, 'inpaint_color_range', False)
+        color_range_state_mask = getattr(async_task, 'inpaint_color_range_mask', None)
+        color_range_state_image = getattr(async_task, 'inpaint_color_range_image', None)
+
         if (async_task.current_tab == 'inpaint' or (
-                async_task.current_tab == 'ip' and async_task.mixing_image_prompt_and_inpaint)) \
-                and isinstance(async_task.inpaint_input_image, dict):
-            inpaint_image = async_task.inpaint_input_image.get('image')
-            raw_mask = async_task.inpaint_input_image.get('mask')
+                async_task.current_tab == 'ip' and async_task.mixing_image_prompt_and_inpaint) or
+                (has_color_range and (isinstance(async_task.inpaint_input_image, dict) or color_range_state_mask is not None))):
+            
+            inpaint_image = None
+            raw_mask = None
+            if isinstance(async_task.inpaint_input_image, dict):
+                inpaint_image = async_task.inpaint_input_image.get('image')
+                raw_mask = async_task.inpaint_input_image.get('mask')
+
+            if inpaint_image is None and isinstance(color_range_state_image, np.ndarray):
+                inpaint_image = color_range_state_image
+
             if raw_mask is not None and isinstance(raw_mask, np.ndarray) and raw_mask.ndim >= 3:
                 inpaint_mask = raw_mask[:, :, 0]
             elif isinstance(raw_mask, np.ndarray):
                 inpaint_mask = raw_mask
             else:
                 inpaint_mask = None
+
+            # Color Range integration
+            if has_color_range and isinstance(inpaint_image, np.ndarray):
+                cr_mask = None
+                if isinstance(color_range_state_mask, np.ndarray) and np.any(color_range_state_mask > 127):
+                    cr_mask = color_range_state_mask
+                elif getattr(async_task, 'color_range_picker', None) is not None:
+                    # Compute on the fly if not yet cached in state
+                    from modules.smart_brush import select_color_range
+                    picker = async_task.color_range_picker
+                    fuzziness = getattr(async_task, 'color_range_fuzziness', 30)
+                    mode = getattr(async_task, 'color_range_mode', 'Replace')
+                    cr_mask = select_color_range(
+                        image_rgb=inpaint_image,
+                        target_hex=picker,
+                        fuzziness=fuzziness,
+                        lightness_weight=0.4,
+                        mode=mode.lower() if isinstance(mode, str) else 'replace',
+                        existing_mask=inpaint_mask
+                    )
+
+                if isinstance(cr_mask, np.ndarray) and np.any(cr_mask > 127):
+                    if cr_mask.shape[:2] != inpaint_image.shape[:2]:
+                        H, W = inpaint_image.shape[:2]
+                        cr_mask = resample_image(cr_mask, width=W, height=H)
+                    if inpaint_mask is None or not np.any(inpaint_mask > 127):
+                        inpaint_mask = cr_mask
+                    else:
+                        inpaint_mask = np.maximum(inpaint_mask, cr_mask)
 
             if isinstance(inpaint_image, np.ndarray) and isinstance(inpaint_mask, np.ndarray):
                 if inpaint_image.shape[:2] != inpaint_mask.shape[:2]:

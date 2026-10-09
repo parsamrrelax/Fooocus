@@ -332,15 +332,24 @@ with shared.gradio_root:
 
                                 pick_color_btn.click(fn=None, _js='() => pickColorFromCanvas()', queue=False, show_progress=False)
 
-                                def trigger_color_range(image_dict, target_color, fuzziness, mode):
+                                inpaint_color_range_mask = gr.State(None)
+                                inpaint_color_range_image = gr.State(None)
+
+                                def trigger_color_range(image_dict, target_color, fuzziness, mode, prev_mask, prev_img):
                                     import numpy as np
-                                    if not isinstance(image_dict, dict):
-                                        return gr.update(), ""
-                                    img = image_dict.get('image')
-                                    mask = image_dict.get('mask')
+                                    img = None
+                                    mask = None
+                                    if isinstance(image_dict, dict):
+                                        img = image_dict.get('image')
+                                        mask = image_dict.get('mask')
                                     if img is None:
-                                        return gr.update(), ""
-                                    from modules.smart_brush import select_color_range, mask_to_rgba, mask_to_data_url
+                                        img = prev_img
+                                    if img is None:
+                                        return "", prev_mask, prev_img, 'inpaint'
+                                    if mask is None:
+                                        mask = prev_mask
+
+                                    from modules.smart_brush import select_color_range, mask_to_data_url
                                     selected_mask = select_color_range(
                                         image_rgb=img,
                                         target_hex=target_color,
@@ -349,14 +358,13 @@ with shared.gradio_root:
                                         mode=mode.lower(),
                                         existing_mask=mask
                                     )
-                                    rgba = mask_to_rgba(selected_mask)
                                     data_url = mask_to_data_url(selected_mask)
-                                    return {'image': img, 'mask': rgba}, data_url
+                                    return data_url, selected_mask, img, 'inpaint'
 
                                 apply_color_range_btn.click(
                                     fn=trigger_color_range,
-                                    inputs=[inpaint_input_image, color_range_picker, color_range_fuzziness, color_range_mode],
-                                    outputs=[inpaint_input_image, smart_brush_output],
+                                    inputs=[inpaint_input_image, color_range_picker, color_range_fuzziness, color_range_mode, inpaint_color_range_mask, inpaint_color_range_image],
+                                    outputs=[smart_brush_output, inpaint_color_range_mask, inpaint_color_range_image, current_tab],
                                     queue=False,
                                     show_progress=True
                                 ).then(
@@ -370,8 +378,8 @@ with shared.gradio_root:
 
                                 color_range_fuzziness.release(
                                     fn=trigger_color_range,
-                                    inputs=[inpaint_input_image, color_range_picker, color_range_fuzziness, color_range_mode],
-                                    outputs=[inpaint_input_image, smart_brush_output],
+                                    inputs=[inpaint_input_image, color_range_picker, color_range_fuzziness, color_range_mode, inpaint_color_range_mask, inpaint_color_range_image],
+                                    outputs=[smart_brush_output, inpaint_color_range_mask, inpaint_color_range_image, current_tab],
                                     queue=False,
                                     show_progress=False
                                 ).then(
@@ -1170,7 +1178,8 @@ with shared.gradio_root:
                                      inputs=[inpaint_mask_image, inpaint_generated_mask, inpaint_input_image, inpaint_mask_eraser],
                                      outputs=[inpaint_mask_image, inpaint_generated_mask],
                                      queue=False, show_progress=False)
-        inpaint_input_image.upload(lambda: None, outputs=inpaint_generated_mask, queue=False, show_progress=False)
+        inpaint_input_image.upload(lambda: (None, None, None), outputs=[inpaint_generated_mask, inpaint_color_range_mask, inpaint_color_range_image], queue=False, show_progress=False)
+        inpaint_input_image.clear(lambda: (None, None, None), outputs=[inpaint_generated_mask, inpaint_color_range_mask, inpaint_color_range_image], queue=False, show_progress=False)
         inpaint_mask_image.upload(lambda: None, outputs=inpaint_generated_mask, queue=False, show_progress=False)
         inpaint_mask_image.clear(lambda: None, outputs=inpaint_generated_mask, queue=False, show_progress=False)
 
@@ -1184,7 +1193,13 @@ with shared.gradio_root:
         ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls
         ctrls += [input_image_checkbox, current_tab]
         ctrls += [uov_method, uov_input_image]
-        ctrls += [outpaint_selections, inpaint_input_image, inpaint_additional_prompt, inpaint_mask_image, inpaint_generated_mask, inpaint_mask_eraser, inpaint_smart_brush, smart_brush_tolerance]
+        ctrls += [
+            outpaint_selections, inpaint_input_image, inpaint_additional_prompt,
+            inpaint_mask_image, inpaint_generated_mask, inpaint_mask_eraser,
+            inpaint_smart_brush, smart_brush_tolerance,
+            inpaint_color_range, color_range_picker, color_range_fuzziness, color_range_mode,
+            inpaint_color_range_mask, inpaint_color_range_image
+        ]
         ctrls += [disable_preview, disable_intermediate_results, disable_seed_increment, black_out_nsfw]
         ctrls += [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg, clip_skip]
         ctrls += [sampler_name, scheduler_name, vae_name]
