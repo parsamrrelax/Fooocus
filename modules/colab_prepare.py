@@ -15,6 +15,8 @@ COLAB_REQUIREMENTS = [
     'numpy==1.26.4',
     'starlette>=0.27.0,<1.0.0',
     'transformers>=4.42.4,<4.45.0',
+    'websockets>=10.0,<12.0',
+    'uvicorn>=0.14.0,<0.26.0',
     'huggingface_hub',
 ]
 
@@ -159,3 +161,24 @@ def patch_gradio_websocket_limits():
             )
             utils_path.write_text(new_text)
             print(f'[Colab] Patched Gradio AsyncRequest resilience in {utils_path}')
+
+    # Fix Gradio 3.x Queue message timeouts (default send_message timeout=1s drops large image edits on Colab with 1005 error)
+    queue_path = _gradio_file_path('queueing.py')
+    if queue_path is not None:
+        q_text = queue_path.read_text()
+        modified = False
+        if 'timeout: float | int = 1' in q_text:
+            q_text = q_text.replace('timeout: float | int = 1', 'timeout: float | int = 300')
+            modified = True
+        if 'def get_message(self, event, timeout=5)' in q_text:
+            q_text = q_text.replace('def get_message(self, event, timeout=5)', 'def get_message(self, event, timeout=300)')
+            modified = True
+        if 'receive_timeout=60' in q_text:
+            q_text = q_text.replace('receive_timeout=60', 'receive_timeout=300')
+            modified = True
+        if modified:
+            queue_path.write_text(q_text)
+            print(f'[Colab] Patched Gradio Queue timeouts in {queue_path}')
+        else:
+            print(f'[Colab] Gradio Queue timeouts already patched or not found: {queue_path}')
+

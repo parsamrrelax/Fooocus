@@ -11,6 +11,8 @@ psutil>=6.0.0
 pytorch_lightning>=2.3.3
 omegaconf>=2.3.0
 gradio==3.41.2
+websockets>=10.0,<12.0
+uvicorn>=0.14.0,<0.26.0
 starlette>=0.27.0,<1.0.0
 opencv-contrib-python-headless>=4.10.0.84
 httpx>=0.27.0
