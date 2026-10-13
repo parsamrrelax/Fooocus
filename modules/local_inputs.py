@@ -57,6 +57,42 @@ def get_latest_zip_file(folder: str | None = None) -> str | None:
     return files[0] if len(files) > 0 else None
 
 
+def save_uploaded_zip(uploaded_file, folder: str | None = None) -> tuple[bool, str, str | None]:
+    """
+    Saves an uploaded zip file from Gradio's temp directory into the inputs folder.
+    Returns (success, message, saved_filename).
+    """
+    if uploaded_file is None:
+        return False, "No file uploaded.", None
+
+    if isinstance(uploaded_file, list):
+        if len(uploaded_file) == 0:
+            return False, "No file uploaded.", None
+        uploaded_file = uploaded_file[0]
+
+    # Gradio passes either a temp file object or a filepath string
+    if hasattr(uploaded_file, 'name'):
+        src_path = uploaded_file.name
+        orig_name = getattr(uploaded_file, 'orig_name', None) or os.path.basename(src_path)
+    elif isinstance(uploaded_file, str):
+        src_path = uploaded_file
+        orig_name = os.path.basename(src_path)
+    else:
+        return False, f"Unexpected upload format: {type(uploaded_file)}", None
+
+    if not os.path.isfile(src_path):
+        return False, f"Uploaded temporary file not found at: {src_path}", None
+
+    target_dir = resolve_input_dir(folder)
+    dest_path = os.path.join(target_dir, orig_name)
+
+    try:
+        shutil.copy2(src_path, dest_path)
+        return True, f"✅ Successfully saved `{orig_name}` to inputs folder.", orig_name
+    except Exception as e:
+        return False, f"❌ Failed to save uploaded zip: {e}", None
+
+
 def extract_zip_archive(zip_filename: str | None, password: str | None = None, folder: str | None = None) -> tuple[bool, str, int]:
     """
     Extracts a password-protected (or plain) archive into the target folder.

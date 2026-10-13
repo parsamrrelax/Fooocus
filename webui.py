@@ -279,24 +279,32 @@ with shared.gradio_root:
                                             info="Colab directory containing your zip file or unzipped images (default: /content/Fooocus/inputs)"
                                         )
                                     with gr.Row():
-                                        local_zip_dropdown = gr.Dropdown(
-                                            label="Detected Zip Archive",
-                                            choices=modules.local_inputs.get_zip_files(),
-                                            value=modules.local_inputs.get_latest_zip_file(),
-                                            interactive=True,
-                                            scale=3
-                                        )
-                                        local_zip_password = gr.Textbox(
-                                            label="Zip Password",
-                                            placeholder="Password (leave blank if unencrypted)",
-                                            type="password",
+                                        local_zip_upload = gr.File(
+                                            label="Upload Zip Archive Directly",
+                                            file_types=['.zip', '.7z', '.rar', '.tar', '.gz'],
+                                            file_count="single",
+                                            type="file",
                                             scale=2
                                         )
-                                        local_extract_btn = gr.Button(
-                                            value="🔓 Extract Zip",
-                                            variant="secondary",
-                                            scale=1
-                                        )
+                                        with gr.Column(scale=3):
+                                            local_zip_dropdown = gr.Dropdown(
+                                                label="Detected / Uploaded Zip Archive",
+                                                choices=modules.local_inputs.get_zip_files(),
+                                                value=modules.local_inputs.get_latest_zip_file(),
+                                                interactive=True
+                                            )
+                                            with gr.Row():
+                                                local_zip_password = gr.Textbox(
+                                                    label="Zip Password",
+                                                    placeholder="Password (leave blank if unencrypted)",
+                                                    type="password",
+                                                    scale=2
+                                                )
+                                                local_extract_btn = gr.Button(
+                                                    value="🔓 Extract Zip",
+                                                    variant="secondary",
+                                                    scale=1
+                                                )
                                     local_extract_status = gr.Markdown(value="", visible=False)
                                     with gr.Row():
                                         local_image_dropdown = gr.Dropdown(
@@ -351,6 +359,35 @@ with shared.gradio_root:
                                     canvas_update = {'image': loaded, 'mask': None} if loaded is not None else gr.update()
                                     return gr.update(choices=imgs, value=next_img), canvas_update
 
+                                def on_zip_uploaded(uploaded_file, password, folder):
+                                    if uploaded_file is None:
+                                        return gr.update(), gr.update(), gr.update(), gr.update()
+                                    success, msg, saved_name = modules.local_inputs.save_uploaded_zip(uploaded_file, folder)
+                                    if not success:
+                                        return gr.update(value=msg, visible=True), gr.update(), gr.update(), gr.update()
+
+                                    zips = modules.local_inputs.get_zip_files(folder)
+
+                                    if password and password.strip():
+                                        extract_ok, extract_msg, count = modules.local_inputs.extract_zip_archive(saved_name, password, folder)
+                                        imgs = modules.local_inputs.get_image_files(folder)
+                                        first_img = imgs[0] if len(imgs) > 0 else None
+                                        canvas_up = gr.update()
+                                        if extract_ok and first_img:
+                                            loaded = modules.local_inputs.load_image_for_canvas(first_img, folder)
+                                            if loaded is not None:
+                                                canvas_up = {'image': loaded, 'mask': None}
+                                        return gr.update(value=extract_msg, visible=True), gr.update(choices=zips, value=saved_name), gr.update(choices=imgs, value=first_img), canvas_up
+
+                                    prompt_msg = f"✅ Uploaded `{saved_name}` to inputs. Enter password (if encrypted) and click **🔓 Extract Zip**."
+                                    return gr.update(value=prompt_msg, visible=True), gr.update(choices=zips, value=saved_name), gr.update(), gr.update()
+
+                                local_zip_upload.upload(
+                                    fn=on_zip_uploaded,
+                                    inputs=[local_zip_upload, local_zip_password, local_inputs_dir],
+                                    outputs=[local_extract_status, local_zip_dropdown, local_image_dropdown, inpaint_input_image],
+                                    queue=False, show_progress=True
+                                )
                                 local_refresh_btn.click(
                                     fn=refresh_local_inputs,
                                     inputs=[local_inputs_dir],
