@@ -884,6 +884,13 @@ def worker():
                 inpaint_image = async_task.inpaint_input_image.get('image')
                 raw_mask = async_task.inpaint_input_image.get('mask')
 
+            import modules.local_inputs as local_inputs
+            local_disk_path = local_inputs.get_current_selected_image_path()
+            if local_disk_path and os.path.isfile(local_disk_path) and inpaint_image is not None:
+                disk_img = local_inputs.load_original_disk_image(local_disk_path)
+                if disk_img is not None:
+                    inpaint_image = disk_img
+
             if inpaint_image is None and isinstance(color_range_state_image, np.ndarray):
                 inpaint_image = color_range_state_image
 

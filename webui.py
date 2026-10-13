@@ -15,6 +15,7 @@ import modules.gradio_hijack as grh
 import modules.style_sorter as style_sorter
 import modules.meta_parser
 import args_manager
+import modules.local_inputs
 import copy
 import launch
 from extras.inpaint_mask import SAMOptions
@@ -270,7 +271,122 @@ with shared.gradio_root:
                     with gr.Tab(label='Inpaint or Outpaint', id='inpaint_tab') as inpaint_tab:
                         with gr.Row():
                             with gr.Column():
+                                with gr.Accordion("📂 Load from Colab / Local Inputs (Zip Extractor)", open=False):
+                                    with gr.Row():
+                                        local_inputs_dir = gr.Textbox(
+                                            label="Inputs Folder on Colab",
+                                            value=modules.local_inputs.get_default_input_dir(),
+                                            info="Colab directory containing your zip file or unzipped images (default: /content/Fooocus/inputs)"
+                                        )
+                                    with gr.Row():
+                                        local_zip_dropdown = gr.Dropdown(
+                                            label="Detected Zip Archive",
+                                            choices=modules.local_inputs.get_zip_files(),
+                                            value=modules.local_inputs.get_latest_zip_file(),
+                                            interactive=True,
+                                            scale=3
+                                        )
+                                        local_zip_password = gr.Textbox(
+                                            label="Zip Password",
+                                            placeholder="Password (leave blank if unencrypted)",
+                                            type="password",
+                                            scale=2
+                                        )
+                                        local_extract_btn = gr.Button(
+                                            value="🔓 Extract Zip",
+                                            variant="secondary",
+                                            scale=1
+                                        )
+                                    local_extract_status = gr.Markdown(value="", visible=False)
+                                    with gr.Row():
+                                        local_image_dropdown = gr.Dropdown(
+                                            label="Select Local Image",
+                                            choices=modules.local_inputs.get_image_files(),
+                                            value=None,
+                                            interactive=True,
+                                            scale=4
+                                        )
+                                        local_prev_btn = gr.Button(value="⏮ Prev", scale=1)
+                                        local_next_btn = gr.Button(value="Next ⏭", scale=1)
+                                        local_refresh_btn = gr.Button(value="🔄 Refresh", scale=1)
+
                                 inpaint_input_image = grh.Image(label='Image', source='upload', type='numpy', tool='sketch', height=500, brush_color="#FFFFFF", elem_id='inpaint_canvas', show_label=False)
+
+                                def refresh_local_inputs(folder):
+                                    zips = modules.local_inputs.get_zip_files(folder)
+                                    latest_zip = zips[0] if len(zips) > 0 else None
+                                    imgs = modules.local_inputs.get_image_files(folder)
+                                    return gr.update(choices=zips, value=latest_zip), gr.update(choices=imgs, value=None)
+
+                                def extract_local_zip(zip_name, password, folder):
+                                    success, msg, count = modules.local_inputs.extract_zip_archive(zip_name, password, folder)
+                                    imgs = modules.local_inputs.get_image_files(folder)
+                                    first_img = imgs[0] if len(imgs) > 0 else None
+                                    canvas_update = gr.update()
+                                    if success and first_img:
+                                        loaded = modules.local_inputs.load_image_for_canvas(first_img, folder)
+                                        if loaded is not None:
+                                            canvas_update = {'image': loaded, 'mask': None}
+                                    return gr.update(value=msg, visible=True), gr.update(choices=imgs, value=first_img), canvas_update
+
+                                def on_local_image_selected(img_rel, folder):
+                                    if not img_rel:
+                                        return gr.update()
+                                    loaded = modules.local_inputs.load_image_for_canvas(img_rel, folder)
+                                    if loaded is not None:
+                                        return {'image': loaded, 'mask': None}
+                                    return gr.update()
+
+                                def step_local_image(current_img, folder, step):
+                                    imgs = modules.local_inputs.get_image_files(folder)
+                                    if not imgs:
+                                        return gr.update(), gr.update()
+                                    try:
+                                        curr_idx = imgs.index(current_img)
+                                        next_idx = (curr_idx + step) % len(imgs)
+                                    except ValueError:
+                                        next_idx = 0 if step > 0 else len(imgs) - 1
+                                    next_img = imgs[next_idx]
+                                    loaded = modules.local_inputs.load_image_for_canvas(next_img, folder)
+                                    canvas_update = {'image': loaded, 'mask': None} if loaded is not None else gr.update()
+                                    return gr.update(choices=imgs, value=next_img), canvas_update
+
+                                local_refresh_btn.click(
+                                    fn=refresh_local_inputs,
+                                    inputs=[local_inputs_dir],
+                                    outputs=[local_zip_dropdown, local_image_dropdown],
+                                    queue=False, show_progress=False
+                                )
+                                local_inputs_dir.submit(
+                                    fn=refresh_local_inputs,
+                                    inputs=[local_inputs_dir],
+                                    outputs=[local_zip_dropdown, local_image_dropdown],
+                                    queue=False, show_progress=False
+                                )
+                                local_extract_btn.click(
+                                    fn=extract_local_zip,
+                                    inputs=[local_zip_dropdown, local_zip_password, local_inputs_dir],
+                                    outputs=[local_extract_status, local_image_dropdown, inpaint_input_image],
+                                    queue=False, show_progress=True
+                                )
+                                local_image_dropdown.change(
+                                    fn=on_local_image_selected,
+                                    inputs=[local_image_dropdown, local_inputs_dir],
+                                    outputs=[inpaint_input_image],
+                                    queue=False, show_progress=False
+                                )
+                                local_prev_btn.click(
+                                    fn=lambda curr, fld: step_local_image(curr, fld, -1),
+                                    inputs=[local_image_dropdown, local_inputs_dir],
+                                    outputs=[local_image_dropdown, inpaint_input_image],
+                                    queue=False, show_progress=False
+                                )
+                                local_next_btn.click(
+                                    fn=lambda curr, fld: step_local_image(curr, fld, 1),
+                                    inputs=[local_image_dropdown, local_inputs_dir],
+                                    outputs=[local_image_dropdown, inpaint_input_image],
+                                    queue=False, show_progress=False
+                                )
                                 inpaint_mask_eraser = gr.Checkbox(label='Use mask eraser', value=False)
                                 inpaint_smart_brush = gr.Checkbox(label='Use smart edge brush (auto-snapping)', value=modules.config.default_inpaint_smart_brush)
                                 with gr.Row(visible=modules.config.default_inpaint_smart_brush) as inpaint_smart_brush_row:
@@ -1180,8 +1296,16 @@ with shared.gradio_root:
                                      inputs=[inpaint_mask_image, inpaint_generated_mask, inpaint_input_image, inpaint_mask_eraser],
                                      outputs=[inpaint_mask_image, inpaint_generated_mask],
                                      queue=False, show_progress=False)
-        inpaint_input_image.upload(lambda: (None, None, None), outputs=[inpaint_generated_mask, inpaint_color_range_mask, inpaint_color_range_image], queue=False, show_progress=False)
-        inpaint_input_image.clear(lambda: (None, None, None), outputs=[inpaint_generated_mask, inpaint_color_range_mask, inpaint_color_range_image], queue=False, show_progress=False)
+        def on_inpaint_upload():
+            modules.local_inputs.clear_selected_image_path()
+            return None, None, None, gr.update(value=None)
+
+        def on_inpaint_clear():
+            modules.local_inputs.clear_selected_image_path()
+            return None, None, None, gr.update(value=None)
+
+        inpaint_input_image.upload(on_inpaint_upload, outputs=[inpaint_generated_mask, inpaint_color_range_mask, inpaint_color_range_image, local_image_dropdown], queue=False, show_progress=False)
+        inpaint_input_image.clear(on_inpaint_clear, outputs=[inpaint_generated_mask, inpaint_color_range_mask, inpaint_color_range_image, local_image_dropdown], queue=False, show_progress=False)
         inpaint_mask_image.upload(lambda: None, outputs=inpaint_generated_mask, queue=False, show_progress=False)
         inpaint_mask_image.clear(lambda: None, outputs=inpaint_generated_mask, queue=False, show_progress=False)
 
